@@ -15,13 +15,13 @@ chosen over the available shell equivalent. Companion to `crates/tui/src/prompts
   for the same backing operation are a model trap — the LLM will alternate
   between them and the cache hit rate suffers.
 
-## Current surface (v0.8.35)
+## Current surface (v0.8.49)
 
 ### File operations
 
 | Tool | Niche |
 |---|---|
-| `read_file` | Read a UTF-8 file. PDFs auto-extracted via `pdftotext` (poppler) when available; `pages: "1-5"` slices large docs. |
+| `read_file` | Read a UTF-8 file. PDFs auto-extracted via bundled pure-Rust extractor (no Poppler install required); `pages: "1-5"` slices large docs. |
 | `list_dir` | Structured, gitignore-aware listing. Preferred over `exec_shell("ls")`. |
 | `write_file` | Create or overwrite a file. |
 | `edit_file` | Search-and-replace inside a single file. Cheaper than a full rewrite. |
@@ -287,7 +287,7 @@ rg -n '"handle_read"|"rlm_open"|"rlm_eval"|"rlm_configure"|"rlm_close"|"agent_op
 rg -n 'handle_read|rlm_open|rlm_eval|rlm_configure|rlm_close|agent_open|agent_eval|agent_close' docs crates/tui/src/prompts crates/tui/src/tools
 ```
 
-The canonical v0.8.35 live names are:
+The canonical live names (since v0.8.35, still current in v0.8.49):
 
 - `handle_read`
 - `rlm_open`, `rlm_eval`, `rlm_configure`, `rlm_close`
@@ -297,6 +297,33 @@ The registry should not actively advertise the legacy one-shot names
 `agent_spawn`, `agent_wait`, `agent_result`, or the old foreground `rlm` tool
 outside legacy/removal notes. Historical changelog entries and compatibility
 code may still mention them.
+
+## Additional registered tools (v0.8.49)
+
+The category tables above cover the most commonly used tools. The full
+registry also includes these model-visible tools:
+
+| Tool | Niche |
+|---|---|
+| `web.run` | Browser-based web interaction (JavaScript-rendered pages, form filling) |
+| `multi_tool_use.parallel` | Execute multiple independent tools in a single turn |
+| `request_user_input` | Prompt the user for input mid-turn |
+| `git_show` / `git_log` / `git_blame` | Inspect commit details, history, and line authorship |
+| `load_skill` | Load a skill by id from the installed skill set |
+| `revert_turn` | Roll back the workspace to a pre-turn snapshot |
+| `pandoc_convert` | Convert between document formats via pandoc (gated by binary presence) |
+| `validate_data` | Validate JSON or TOML against a schema |
+| `code_execution` | Execute Python code in an isolated sandbox |
+| `review` | Code review with structured feedback |
+| `project_map` | Generate a structural map of the project workspace |
+| `remember` | Store a persistent fact in user memory (gated by `memory_enabled`) |
+| `image_analyze` | Vision-model image understanding (gated by `[vision_model]` config) |
+| `image_ocr` | Extract text from images via local OCR |
+| `finance` | Fetch market data and stock quotes |
+
+MCP tools, plugin-provided tools, and feature-gated tools may also be
+visible depending on runtime configuration. Use `codewhale tools list` or
+the TUI `/tools` palette to inspect the active catalog.
 
 ## Why we don't ship a single `bash` tool
 
