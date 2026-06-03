@@ -1693,6 +1693,61 @@ async fn change_mode_refreshes_session_prompt_and_updates_session() {
     assert!(prompt.contains("Approval Policy: Auto"));
 }
 
+#[tokio::test]
+async fn change_mode_op_injects_runtime_event_into_session_messages() {
+    let tmp = tempdir().expect("tempdir");
+    let config = EngineConfig {
+        workspace: tmp.path().to_path_buf(),
+        model: "deepseek-v4-pro".to_string(),
+        ..Default::default()
+    };
+    let (engine, handle) = Engine::new(config, &Config::default());
+
+    let run = tokio::spawn(engine.run());
+    // Switch from default Agent → YOLO
+    handle
+        .send(Op::ChangeMode {
+            mode: AppMode::Yolo,
+        })
+        .await
+        .expect("send change mode");
+
+    // Collect session-updated events until we see the injected message
+    let messages = {
+        let mut rx = handle.rx_event.write().await;
+        loop {
+            let event = tokio::time::timeout(std::time::Duration::from_secs(2), rx.recv())
+                .await
+                .expect("session update after mode switch")
+                .expect("event");
+            if let Event::SessionUpdated { messages, .. } = event {
+                // The last message should be our runtime event
+                if let Some(last) = messages.last()
+                    && let ContentBlock::Text { text, .. } =
+                        last.content.first().expect("text block")
+                    && text.contains("kind=\"mode_change\"")
+                {
+                    break messages;
+                }
+            }
+        }
+    };
+    run.abort();
+
+    let last = messages.last().expect("at least one message");
+    let ContentBlock::Text { text, .. } = last.content.first().expect("text block") else {
+        panic!("expected text block");
+    };
+    assert!(
+        text.contains("Agent mode") && text.contains("YOLO mode"),
+        "should contain both previous and new mode: {text}"
+    );
+    assert!(
+        text.contains("Re-evaluate"),
+        "should tell agent to re-evaluate: {text}"
+    );
+}
+
 #[test]
 fn detects_context_length_errors_from_provider_payloads() {
     let msg = r#"SSE stream request failed: HTTP 400 Bad Request: {"error":{"message":"This model's maximum context length is 131072 tokens. However, you requested 153056 tokens (148960 in the messages, 4096 in the completion).","type":"invalid_request_error"}}"#;
@@ -2118,6 +2173,7 @@ fn turn_metadata_includes_auto_model_route() {
 
     let user_msg = engine.user_text_message_with_turn_metadata_for_route(
         "debug this regression".to_string(),
+        AppMode::Agent,
         "deepseek-v4-pro",
         true,
         Some("max"),
@@ -2132,6 +2188,94 @@ fn turn_metadata_includes_auto_model_route() {
     assert!(text.contains("Auto model route: deepseek-v4-pro"));
     assert!(text.contains("Auto reasoning effort: max"));
     assert!(!text.contains("debug this regression"));
+}
+
+#[test]
+fn turn_metadata_includes_current_mode() {
+    let tmp = tempdir().expect("tempdir");
+    let config = EngineConfig {
+        workspace: tmp.path().to_path_buf(),
+        ..Default::default()
+    };
+    let (engine, _handle) = Engine::new(config, &Config::default());
+
+    let user_msg = engine.user_text_message_with_turn_metadata_for_route(
+        "test mode metadata".to_string(),
+        AppMode::Yolo,
+        "deepseek-v4-flash",
+        false,
+        None,
+        false,
+    );
+    let first_block = user_msg.content.first().expect("turn metadata block");
+    let ContentBlock::Text { text, .. } = first_block else {
+        panic!("expected text metadata block");
+    };
+
+    assert!(
+        text.contains("Current mode: YOLO mode - full tool access without approvals"),
+        "turn metadata should include the current mode label, got: {text}"
+    );
+}
+
+#[test]
+fn turn_metadata_mode_updates_with_change_mode_op() {
+    let tmp = tempdir().expect("tempdir");
+    let config = EngineConfig {
+        workspace: tmp.path().to_path_buf(),
+        ..Default::default()
+    };
+    let (mut engine, _handle) = Engine::new(config, &Config::default());
+
+    // In agent mode by default
+    let msg = engine.user_text_message_with_turn_metadata("hello".to_string());
+    let first_block = msg.content.first().expect("turn metadata block");
+    let ContentBlock::Text { text, .. } = first_block else {
+        panic!("expected text metadata block");
+    };
+    assert!(
+        text.contains("Agent mode"),
+        "initial mode should be Agent, got: {text}"
+    );
+
+    // Switch to YOLO — user_text_message_with_turn_metadata should reflect the new mode
+    engine.current_mode = AppMode::Yolo;
+    let msg = engine.user_text_message_with_turn_metadata("hello again".to_string());
+    let first_block = msg.content.first().expect("turn metadata block");
+    let ContentBlock::Text { text, .. } = first_block else {
+        panic!("expected text metadata block");
+    };
+    assert!(
+        text.contains("YOLO mode"),
+        "mode after change should be YOLO, got: {text}"
+    );
+}
+
+#[test]
+fn mode_change_runtime_message_format() {
+    let msg = Engine::mode_change_runtime_message(AppMode::Agent, AppMode::Yolo);
+
+    assert_eq!(msg.role, "user");
+    let ContentBlock::Text { text, .. } = msg.content.first().expect("text block") else {
+        panic!("expected text block");
+    };
+
+    assert!(
+        text.contains("codewhale:runtime_event"),
+        "should be a runtime event message"
+    );
+    assert!(
+        text.contains("kind=\"mode_change\""),
+        "should have mode_change kind"
+    );
+    assert!(
+        text.contains("Agent mode") && text.contains("YOLO mode"),
+        "should mention both previous and new mode: {text}"
+    );
+    assert!(
+        text.contains("Re-evaluate"),
+        "should tell agent to re-evaluate blocked operations: {text}"
+    );
 }
 
 #[test]
