@@ -154,31 +154,36 @@ def validate(commits: list[Commit], aliases: dict[str, Identity], check_authors:
             Identity(match.group("name").strip(), match.group("email").strip())
             for match in COAUTHOR_RE.finditer(commit.body)
         ]
+        harvested_logins = HARVEST_RE.findall(commit.body)
+        is_harvested_commit = bool(harvested_logins)
+        mapped_author = lookup_identity(aliases, commit.author_email, commit.author_name)
 
         if check_authors:
-            if is_bot_identity(commit.author_name, commit.author_email):
+            if is_harvested_commit and is_bot_identity(commit.author_name, commit.author_email):
                 errors.append(
                     f"{prefix}: author {commit.author_name} <{commit.author_email}> is a "
                     "bot/tool identity. Human harvested work should preserve the contributor "
                     "as author or use a human co-author trailer."
                 )
             elif (
-                (expected := lookup_identity(aliases, commit.author_email, commit.author_name))
-                and norm_key(commit.author_email) != norm_key(expected.email)
+                is_harvested_commit
+                and mapped_author
+                and norm_key(commit.author_email) != norm_key(mapped_author.email)
             ):
                 errors.append(
                     f"{prefix}: author {commit.author_name} <{commit.author_email}> "
-                    f"matches AUTHOR_MAP but is not canonical. Use author {expected.author()}."
+                    f"matches AUTHOR_MAP but is not canonical. Use author {mapped_author.author()}."
                 )
 
         for coauthor in coauthors:
             if CANONICAL_NOREPLY_RE.match(coauthor.email):
                 continue
             if is_bot_identity(coauthor.name, coauthor.email):
-                errors.append(
-                    f"{prefix}: remove bot/tool co-author trailer "
-                    f"{coauthor.name} <{coauthor.email}>; contributor trailers are for humans."
-                )
+                if is_harvested_commit:
+                    errors.append(
+                        f"{prefix}: remove bot/tool co-author trailer "
+                        f"{coauthor.name} <{coauthor.email}>; contributor trailers are for humans."
+                    )
                 continue
             expected = lookup_identity(aliases, coauthor.email, coauthor.name)
             if expected:
@@ -194,7 +199,7 @@ def validate(commits: list[Commit], aliases: dict[str, Identity], check_authors:
                 )
 
         coauthor_emails = {norm_key(coauthor.email) for coauthor in coauthors}
-        for login in HARVEST_RE.findall(commit.body):
+        for login in harvested_logins:
             expected = lookup_identity(aliases, login)
             if expected is None:
                 errors.append(

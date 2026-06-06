@@ -217,6 +217,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Token Plan region endpoints and pay-as-you-go routing, plus dedicated Token
   Plan env keys for `tp-*` subscriptions (#2621, #2627). Thanks @springeye for
   the request and @xyuai for the implementation.
+- Added the first TUI hotbar action registry foundation so future UI controls
+  can dispatch typed app actions instead of growing another command match
+  surface (#2866). Thanks @reidliu41 for the implementation.
+- Added the narrow multi-tab core and persistence foundation, including tab
+  manager snapshots, delegation/group restore counters, mention parsing,
+  cross-tab events, and corruption-tolerant persisted state, while leaving the
+  broader collaboration UI wiring to follow-up work (#2864). Thanks
+  @ljm3790865 for the tab-core implementation and #2753 direction.
 
 ### Changed
 
@@ -335,6 +343,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   now count trusted workspace-local `.codewhale/mcp.json` servers together with
   the global MCP config, matching `codewhale mcp list` for merged global +
   project setups (#2787). Thanks @yekern for the detailed reproduction.
+- AltGr key chords in the composer no longer get swallowed by sidebar shortcuts
+  on AZERTY and other international layouts, so characters such as `@`, `#`,
+  `$`, `!`, and `%` can be entered normally (#2863, #2867). Thanks
+  @ousamabenyounes for the fix and report.
 - Sub-agent shell completions now refresh the workspace branch/status chip
   immediately, and `/subagents` plus the Agents sidebar show each sub-agent's
   current workspace branch when it is running in a child worktree.
@@ -386,6 +398,10 @@ settings-path migration work (#2730), **@gaord** for the runtime thread
 workspace update and completed-thread save APIs (#2640, #2639),
 **@shenjackyuanjie** for the
 HarmonyOS/OpenHarmony port and MatePad Edge validation trail (#2634),
+**@ousamabenyounes** for the AZERTY AltGr composer shortcut fix (#2863,
+#2867), **@reidliu41** for the hotbar action-registry foundation (#2866), and
+**@ljm3790865** for the multi-tab core/persistence foundation and broader
+collaboration direction (#2864, #2753),
 **@idling11** for the PlanArtifact direction in Plan mode (#2733), the dense
 tool-call transcript collapse/sidebar detail direction (#2738, #2734, #2692,
 #2694), and the HarnessPosture config model for provider/model posture (#2741,
