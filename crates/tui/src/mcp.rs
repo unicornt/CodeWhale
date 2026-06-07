@@ -4765,6 +4765,7 @@ mod tests {
         });
 
         let (_sender, receiver) = mpsc::unbounded_channel();
+        let sse_task = tokio::spawn(async {});
         let mut transport = SseTransport {
             client: reqwest::Client::new(),
             base_url: format!("http://{addr}/sse"),
@@ -4772,6 +4773,7 @@ mod tests {
             endpoint_url: Some(format!("http://{addr}/messages")),
             receiver,
             pending_messages: VecDeque::new(),
+            sse_task,
         };
 
         let err = transport
