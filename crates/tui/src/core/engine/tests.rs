@@ -1853,9 +1853,7 @@ async fn change_mode_op_updates_current_mode_and_emits_status() {
         .expect("session update after mode switch")
         .expect("event");
     let Event::SessionUpdated { messages, .. } = session_updated else {
-        panic!(
-            "should emit SessionUpdated after mode change, got: {session_updated:?}"
-        );
+        panic!("should emit SessionUpdated after mode change, got: {session_updated:?}");
     };
     assert!(
         messages.iter().all(|message| {
@@ -2408,8 +2406,9 @@ fn current_mode_field_assignment_takes_effect_synchronously() {
     // Verify runtime tag in Agent mode
     let agent_messages = engine.messages_with_turn_metadata();
     let agent_tag = agent_messages.last().expect("runtime tag message");
-    let ContentBlock::Text { text: agent_text, .. } =
-        agent_tag.content.first().expect("text block")
+    let ContentBlock::Text {
+        text: agent_text, ..
+    } = agent_tag.content.first().expect("text block")
     else {
         panic!("expected text runtime tag in Agent mode");
     };
@@ -2425,8 +2424,9 @@ fn current_mode_field_assignment_takes_effect_synchronously() {
     // Verify runtime tag reflects the YOLO mode with auto approval
     let yolo_messages = engine.messages_with_turn_metadata();
     let yolo_tag = yolo_messages.last().expect("runtime tag message");
-    let ContentBlock::Text { text: yolo_text, .. } =
-        yolo_tag.content.first().expect("text block")
+    let ContentBlock::Text {
+        text: yolo_text, ..
+    } = yolo_tag.content.first().expect("text block")
     else {
         panic!("expected text runtime tag in YOLO mode");
     };
