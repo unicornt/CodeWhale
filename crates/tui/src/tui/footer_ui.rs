@@ -12,10 +12,7 @@ use crate::tui::format_helpers;
 use crate::tui::history::{HistoryCell, ToolCell, ToolStatus, summarize_tool_output};
 use crate::tui::key_shortcuts;
 use crate::tui::subagent_routing::{active_fanout_counts, running_agent_count};
-use crate::tui::ui::{
-    active_foreground_shell_running, context_usage_snapshot, selected_detail_footer_label,
-    status_color,
-};
+use crate::tui::ui::{active_foreground_shell_running, context_usage_snapshot, status_color};
 use crate::tui::ui_text::{concise_shell_command_label, truncate_line_to_width};
 use crate::tui::widgets::tool_card::tool_activity_label_for_name;
 use crate::tui::widgets::{FooterProps, FooterToast, FooterWidget, Renderable};
@@ -95,22 +92,12 @@ pub(crate) fn render_footer(f: &mut Frame, area: Rect, app: &mut App) {
         }
         props.state_label = label;
         props.state_color = palette::DEEPSEEK_SKY;
-
-        // Water-spout frame source: wall-clock milliseconds. The sine-wave
-        // math in `footer_working_strip_glyph_at` was tuned for this cadence
-        // (`t = frame / 1000.0`, primary term × 8.0 ≈ 1.3 Hz at 1 ms ticks),
-        // so frame must advance at ~1000 units/sec to produce the intended
-        // animation feel. `fancy_animations = false` hides the strip and pins
-        // the textual fallback to `working`.
-        if app.fancy_animations {
-            props.working_strip_frame = Some(now_ms);
-        }
-    } else if props.state_label == "ready"
-        && let Some(label) = selected_detail_footer_label(app)
-    {
-        props.state_label = label;
-        props.state_color = palette::TEXT_MUTED;
     }
+    // NOTE: the idle-state `Ctrl+O Activity: <tool-name>` fallback that used
+    // to fill the status slot via `selected_detail_footer_label` has been
+    // removed — the sidebar's "recent tools" panel already shows the same
+    // tool name (and its check/failure marker), so duplicating it in the
+    // footer just clutters the bottom row.
 
     let widget = FooterWidget::new(props);
     let buf = f.buffer_mut();

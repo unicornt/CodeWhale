@@ -13,7 +13,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Paragraph, Widget},
 };
-use unicode_width::UnicodeWidthStr;
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use crate::localization::{Locale, MessageId, tr};
 use crate::palette;
@@ -76,65 +76,29 @@ pub struct FooterProps {
     /// Account balance chip spans (empty when un fetched or zero). Rendered
     /// in the left cluster right after cost.
     pub balance: Vec<Span<'static>>,
+    /// Context-utilisation chip spans (e.g. `▰▰▱▱ 23%`). Empty when there
+    /// is no `last_prompt_tokens` value yet. Rendered in the left cluster
+    /// just after the model/provider so the user can keep an eye on the
+    /// remaining context budget without leaving the bottom row.
+    pub ctx: Vec<Span<'static>>,
+    /// Status-indicator frame (whale or dots) drawn in the centre between
+    /// the left and right clusters during a live turn. `None` when the
+    /// indicator is disabled or the app is idle.
+    pub status_indicator: Option<&'static str>,
+    /// `● Live` streaming marker — phase 4 brings this back into the footer
+    /// centre next to the status indicator (the persistent header used to
+    /// host the duplicate; with the header gone, the centre is the only
+    /// surface that signals streaming).
+    pub live_marker: Vec<Span<'static>>,
+    /// Build/version chip spans (e.g. `v0.8.53`) — always present, drops
+    /// last under width pressure.
+    pub version: Vec<Span<'static>>,
+    /// Transient turn receipts (token / cost summary) — rendered in the
+    /// right cluster just before the version chip. Empty when no recent
+    /// turn finished within the receipt TTL.
+    pub receipts: Vec<Span<'static>>,
     /// Optional toast that, when present, replaces the left status line.
     pub toast: Option<FooterToast>,
-    /// When `Some(frame_idx)`, the gap between the left status line and the
-    /// right-hand chips is filled with an animated water-spout strip keyed
-    /// off `frame_idx` (deterministic given the frame). `None` keeps the gap
-    /// as plain whitespace, which is the idle/ready state.
-    pub working_strip_frame: Option<u64>,
-}
-
-const WAVE_GLYPHS: [char; 8] = [
-    '\u{2581}', // ▁
-    '\u{2582}', // ▂
-    '\u{2583}', // ▃
-    '\u{2584}', // ▄
-    '\u{2585}', // ▅
-    '\u{2586}', // ▆
-    '\u{2587}', // ▇
-    '\u{2588}', // █
-];
-
-/// One frame of the footer's live-work wave animation. `col` is the cell
-/// index inside the strip, `width` the strip's total width, `frame` the raw
-/// millisecond counter. Returns the glyph that should appear in that cell on
-/// that frame.
-///
-/// Visual: a full-width phase-shifted wave made from one-cell block-height
-/// glyphs. The earlier crest-pair animation only changed when rounded crest
-/// positions crossed a terminal cell boundary; at an 80 ms repaint cadence it
-/// read as visible hops. Sampling a few moving sine components gives every
-/// repaint a new surface while keeping the math deterministic for tests.
-#[must_use]
-pub fn footer_working_strip_glyph_at(col: usize, width: usize, frame: u64) -> char {
-    if width == 0 {
-        return ' ';
-    }
-
-    let t = frame as f64 / 1000.0;
-    let x = col as f64;
-
-    let primary = (x * 0.52 - t * 8.0).sin();
-    let swell = (x * 0.18 + t * 3.1).sin() * 0.35;
-    let shimmer = (x * 1.35 - t * 11.0).sin() * 0.12;
-    let value = ((primary + swell + shimmer) / 1.47).clamp(-1.0, 1.0);
-    let normalized = (value + 1.0) * 0.5;
-    let idx = (normalized * (WAVE_GLYPHS.len() - 1) as f64).round() as usize;
-    WAVE_GLYPHS[idx.min(WAVE_GLYPHS.len() - 1)]
-}
-
-/// Build the per-frame live-work wave string of `width` characters. Empty string
-/// when width is 0. The result is the same visual width as requested (one
-/// char per column for the selected block-height glyphs) and is safe to drop
-/// into a `Span` between the footer's left and right segments.
-#[must_use]
-pub fn footer_working_strip_string(width: usize, frame: u64) -> String {
-    let mut out = String::with_capacity(width * 4);
-    for col in 0..width {
-        out.push(footer_working_strip_glyph_at(col, width, frame));
-    }
-    out
 }
 
 /// Pulse the localized "working" label through 0–3 trailing ASCII dots
@@ -255,7 +219,7 @@ impl FooterProps {
     pub fn from_app(
         app: &App,
         toast: Option<FooterToast>,
-        state_label: &'static str,
+        state_label: &str,
         state_color: Color,
         coherence: Vec<Span<'static>>,
         agents: Vec<Span<'static>>,
@@ -280,6 +244,47 @@ impl FooterProps {
         // "worked 4m". The chip stays empty until enough turns add up
         // to cross the 60s threshold inside `footer_worked_chip`.
         let worked = footer_worked_chip(app.cumulative_turn_duration);
+        // Pull the chips that the legacy `HeaderWidget` exposed — the footer
+        // takes over the "always visible / context-utilisation / version /
+        // status indicator / live marker" cluster as the header is removed.
+        let context_window = crate::models::context_window_for_model(&app.model);
+        let ctx = super::chips::context_signal_spans(
+            app.session.last_prompt_tokens,
+            context_window,
+            true,
+        );
+        let status_indicator_started_at = if app.low_motion {
+            None
+        } else {
+            app.turn_started_at
+        };
+        let status_indicator = if app.is_loading {
+            super::header::header_status_indicator_frame(
+                status_indicator_started_at,
+                &app.status_indicator,
+            )
+        } else {
+            None
+        };
+        let live_marker = if app.is_loading {
+            // Centre cluster is space-tight; show the dot alone, drop the
+            // `Live` label. The status indicator next to it already names
+            // the "in-flight" state.
+            super::chips::live_marker_spans(false)
+        } else {
+            Vec::new()
+        };
+        let version = super::chips::version_spans();
+        let receipts = if let Some(text) = app.active_receipt_text() {
+            vec![Span::styled(
+                text.trim().to_string(),
+                Style::default()
+                    .fg(palette::STATUS_SUCCESS)
+                    .add_modifier(ratatui::style::Modifier::DIM),
+            )]
+        } else {
+            Vec::new()
+        };
         Self {
             model: app.model_display_label(),
             mode_label,
@@ -298,8 +303,12 @@ impl FooterProps {
             worked,
             cost,
             balance,
+            ctx,
+            status_indicator,
+            live_marker,
+            version,
+            receipts,
             toast,
-            working_strip_frame: None,
             retry: crate::retry_status::snapshot(),
         }
     }
@@ -335,17 +344,22 @@ impl FooterWidget {
         // right-hand chip parade. Coherence / agents / replay / cache are
         // transient signals; they belong on the right where they appear and
         // disappear without disturbing the steady mode·model·cost line.
+        //
+        // `ctx` is the context-utilisation signal taken over from the
+        // legacy header. It sits up front (highest priority among
+        // right-cluster chips) so users keep an eye on the budget. `worked`
+        // and `receipts` are the lowest priority and drop first under
+        // narrow widths. The `version` chip closes the right cluster.
         let parts: Vec<&Vec<Span<'static>>> = [
+            &self.props.ctx,
             &self.props.coherence,
             &self.props.agents,
             &self.props.reasoning_replay,
             &self.props.cache,
             &self.props.mcp,
-            // `worked` is the lowest-priority chip — drops first under
-            // narrow widths (the priority loop below removes from the
-            // tail). `cost` is steady info and stays in the left
-            // cluster where the eye finds it without scanning.
+            &self.props.receipts,
             &self.props.worked,
+            &self.props.version,
         ]
         .into_iter()
         .filter(|spans| !spans.is_empty())
@@ -562,12 +576,15 @@ impl FooterWidget {
         spans
     }
 
+    /// Build the left status line.
+    ///
+    /// Priority order — only one of these renders at a time:
+    /// 1. Retry banner (#499) — connection-level failure, must surface
+    ///    above anything else.
+    /// 2. Toast — transient notifications take the line for their TTL.
+    /// 3. Status line (mode · model · ... · status_label) — steady state.
     fn left_spans(&self, max_width: usize) -> Vec<Span<'static>> {
         if let Some(banner) = retry_banner_spans(max_width, &self.props) {
-            // Retry banner takes precedence over toast and the regular
-            // status line so the user sees it loud and clear (#499).
-            // The banner clears automatically on success or on the next
-            // `TurnStarted` (engine emits the clear).
             banner
         } else if let Some(toast) = self.props.toast.as_ref() {
             Self::toast_spans(toast, max_width)
@@ -631,30 +648,125 @@ impl Renderable for FooterWidget {
         let right_budget = available_width
             .saturating_sub(preview_left_width)
             .saturating_sub(2);
-        let right_spans = self.auxiliary_spans(right_budget);
-        let right_width = span_width(&right_spans);
+        let mut right_spans = self.auxiliary_spans(right_budget);
+        let mut right_width = span_width(&right_spans);
         let min_gap = if right_width > 0 { 2 } else { 0 };
         let max_left_width = available_width
             .saturating_sub(right_width)
             .saturating_sub(min_gap)
             .max(1);
         let left_spans = self.left_spans(max_left_width);
-
         let left_width = span_width(&left_spans);
+
+        // Safety net: if the actual left + right cluster exceeds the row
+        // width, peel chips off the right cluster until it fits. This
+        // catches the case where `left_spans` re-expanded after the right
+        // cluster was already chosen on the preview width — without this,
+        // the paragraph paints up to the right edge and the trailing right
+        // chips get clipped (the user-visible "ctx/version overflow" bug).
+        while left_width + min_gap + right_width > available_width && !right_spans.is_empty() {
+            right_spans.pop();
+            // Drop the trailing 2-space separator we inserted between chips
+            // alongside its chip so we don't leave a dangling double-space.
+            if right_spans
+                .last()
+                .map(|s| s.content.as_ref() == "  ")
+                .unwrap_or(false)
+            {
+                right_spans.pop();
+            }
+            right_width = span_width(&right_spans);
+        }
+        // Still too wide? Truncate the *left* cluster — the spec keeps the
+        // mode/model/cost line as the highest-priority info, so peel from
+        // the tail (status label / detail hint) until it fits.
+        let mut left_spans = if left_width + min_gap + right_width > available_width {
+            self.left_spans(
+                available_width
+                    .saturating_sub(right_width)
+                    .saturating_sub(min_gap)
+                    .max(1),
+            )
+        } else {
+            left_spans
+        };
+        let mut left_width = span_width(&left_spans);
+        // Final hard clamp: if even the truncated left plus right still
+        // overflows (rare but possible when the cascade can't shrink
+        // further), drop right chips one more time.
+        while left_width + min_gap + right_width > available_width && !right_spans.is_empty() {
+            right_spans.pop();
+            if right_spans
+                .last()
+                .map(|s| s.content.as_ref() == "  ")
+                .unwrap_or(false)
+            {
+                right_spans.pop();
+            }
+            right_width = span_width(&right_spans);
+        }
+        // Absolute last resort — truncate the left cluster's last span
+        // character-by-character so the line never extends past area.
+        while left_width + right_width > available_width {
+            let Some(last) = left_spans.pop() else {
+                break;
+            };
+            let last_text = last.content.as_ref();
+            let allow = available_width
+                .saturating_sub(right_width)
+                .saturating_sub(span_width(&left_spans));
+            if allow == 0 {
+                left_width = span_width(&left_spans);
+                break;
+            }
+            let mut accum = String::new();
+            let mut used = 0usize;
+            for ch in last_text.chars() {
+                let cw = UnicodeWidthChar::width(ch).unwrap_or(0);
+                if used + cw > allow {
+                    break;
+                }
+                accum.push(ch);
+                used += cw;
+            }
+            if !accum.is_empty() {
+                left_spans.push(Span::styled(accum, last.style));
+            }
+            left_width = span_width(&left_spans);
+            break;
+        }
         let spacer_width = available_width.saturating_sub(left_width + right_width);
 
-        // When a turn is in flight, fill the gap with a thin animated water-
-        // spout strip; otherwise the gap stays as plain whitespace.
-        let spacer_span = match self.props.working_strip_frame {
-            Some(frame) if spacer_width > 0 => Span::styled(
-                footer_working_strip_string(spacer_width, frame),
-                Style::default().fg(palette::DEEPSEEK_SKY),
-            ),
-            _ => Span::raw(" ".repeat(spacer_width)),
-        };
+        // Centre cluster: status indicator + `● Live` streaming marker.
+        // Phase 4 brought the live marker into the footer (the persistent
+        // header used to host it); the indicator + marker pair sits in the
+        // middle so the user can spot "in-flight" without scanning.
+        let mut centre_spans: Vec<Span<'static>> = Vec::new();
+        if let Some(frame) = self.props.status_indicator {
+            centre_spans.extend(super::chips::status_indicator_spans(Some(frame)));
+        }
+        if !self.props.live_marker.is_empty() {
+            if !centre_spans.is_empty() {
+                centre_spans.push(Span::raw(" "));
+            }
+            centre_spans.extend(self.props.live_marker.iter().cloned());
+        }
+        let centre_width = span_width(&centre_spans);
 
+        // Build the spacer: when the centre cluster fits with a min 1-col
+        // gap on each side, embed it; otherwise fall through to plain
+        // whitespace.
         let mut all_spans = left_spans;
-        all_spans.push(spacer_span);
+        if !centre_spans.is_empty() && spacer_width >= centre_width + 2 {
+            let total_pad = spacer_width - centre_width;
+            let left_pad = total_pad / 2;
+            let right_pad = total_pad - left_pad;
+            all_spans.push(Span::raw(" ".repeat(left_pad)));
+            all_spans.extend(centre_spans);
+            all_spans.push(Span::raw(" ".repeat(right_pad)));
+        } else {
+            all_spans.push(Span::raw(" ".repeat(spacer_width)));
+        }
         all_spans.extend(right_spans);
 
         let paragraph =
@@ -699,7 +811,7 @@ fn truncate_to_width(text: &str, max_width: usize) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{FooterProps, FooterWidget, Renderable};
+    use super::{FooterProps, FooterToast, FooterWidget, Renderable};
     use crate::config::Config;
     use crate::localization::Locale;
     use crate::palette;
@@ -1071,6 +1183,91 @@ mod tests {
     }
 
     #[test]
+    fn left_spans_priority_retry_beats_toast_and_status() {
+        let app = make_app();
+        let mut props = idle_props_for(&app);
+        props.state_label = "working".to_string();
+        props.toast = Some(FooterToast {
+            text: "saved".to_string(),
+            color: palette::STATUS_SUCCESS,
+        });
+        props.retry = crate::retry_status::RetryState::Active(crate::retry_status::RetryBanner {
+            attempt: 1,
+            deadline: std::time::Instant::now() + std::time::Duration::from_secs(5),
+            reason: "rate limited".to_string(),
+        });
+        let widget = FooterWidget::new(props);
+        let area = ratatui::layout::Rect::new(0, 0, 120, 1);
+        let mut buf = ratatui::buffer::Buffer::empty(area);
+        widget.render(area, &mut buf);
+        let rendered: String = (0..area.width).map(|x| buf[(x, 0)].symbol()).collect();
+        assert!(
+            rendered.contains("retry 1"),
+            "retry must win over toast + status: {rendered:?}",
+        );
+        assert!(
+            !rendered.contains("saved"),
+            "toast must be hidden while retry active: {rendered:?}",
+        );
+    }
+
+    #[test]
+    fn left_spans_priority_toast_beats_status_when_no_retry() {
+        let app = make_app();
+        let mut props = idle_props_for(&app);
+        props.state_label = "working".to_string();
+        props.toast = Some(FooterToast {
+            text: "saved".to_string(),
+            color: palette::STATUS_SUCCESS,
+        });
+        let widget = FooterWidget::new(props);
+        let area = ratatui::layout::Rect::new(0, 0, 120, 1);
+        let mut buf = ratatui::buffer::Buffer::empty(area);
+        widget.render(area, &mut buf);
+        let rendered: String = (0..area.width).map(|x| buf[(x, 0)].symbol()).collect();
+        assert!(
+            rendered.contains("saved"),
+            "toast must replace the status line: {rendered:?}",
+        );
+        assert!(
+            !rendered.contains("working"),
+            "status label must be hidden by toast: {rendered:?}",
+        );
+    }
+
+    #[test]
+    fn version_chip_renders_at_right() {
+        let app = make_app();
+        let props = idle_props_for(&app);
+        let widget = FooterWidget::new(props);
+        let area = ratatui::layout::Rect::new(0, 0, 120, 1);
+        let mut buf = ratatui::buffer::Buffer::empty(area);
+        widget.render(area, &mut buf);
+        let rendered: String = (0..area.width).map(|x| buf[(x, 0)].symbol()).collect();
+        let expected = format!("v{}", env!("CARGO_PKG_VERSION"));
+        assert!(
+            rendered.contains(&expected),
+            "version chip must appear in footer: {rendered:?}",
+        );
+    }
+
+    #[test]
+    fn ctx_chip_appears_in_right_cluster_when_prompt_tokens_known() {
+        let mut app = make_app();
+        app.session.last_prompt_tokens = Some(20_000);
+        let props = idle_props_for(&app);
+        let widget = FooterWidget::new(props);
+        let area = ratatui::layout::Rect::new(0, 0, 200, 1);
+        let mut buf = ratatui::buffer::Buffer::empty(area);
+        widget.render(area, &mut buf);
+        let rendered: String = (0..area.width).map(|x| buf[(x, 0)].symbol()).collect();
+        assert!(
+            rendered.contains('%'),
+            "ctx chip with percent must render: {rendered:?}",
+        );
+    }
+
+    #[test]
     fn render_emits_mode_and_model_when_idle() {
         let app = make_app();
         let props = idle_props_for(&app);
@@ -1084,88 +1281,6 @@ mod tests {
         assert!(rendered.contains("agent"));
         assert!(rendered.contains("deepseek-v4-flash"));
         assert!(!rendered.contains("ready"));
-    }
-
-    #[test]
-    fn working_strip_string_width_matches_request() {
-        // The strip must produce exactly `width` characters per frame —
-        // otherwise the spacer math in `FooterWidget::render` would
-        // mis-align the right-hand chips. Each wave glyph is one cell wide.
-        for width in [0usize, 1, 8, 60, 200] {
-            let s = super::footer_working_strip_string(width, 7);
-            assert_eq!(s.chars().count(), width, "width {width} mismatch");
-        }
-    }
-
-    #[test]
-    fn working_strip_glyph_is_deterministic_per_frame() {
-        // Same (col, width, frame) -> same glyph. Frames are raw
-        // milliseconds so the strip can move at repaint cadence.
-        let a = super::footer_working_strip_string(40, 150);
-        let b = super::footer_working_strip_string(40, 150);
-        assert_eq!(a, b, "deterministic given the same frame");
-        let c = super::footer_working_strip_string(40, 230);
-        assert_ne!(a, c, "advancing one repaint window must change the strip",);
-    }
-
-    #[test]
-    fn working_strip_renders_glyphs_only_when_frame_is_some() {
-        // Idle: spacer is plain whitespace. Active: spacer contains the
-        // wave animation glyphs and visibly differs from the idle render.
-        let app = make_app();
-        let mut props = idle_props_for(&app);
-
-        let area = ratatui::layout::Rect::new(0, 0, 80, 1);
-        let mut buf = ratatui::buffer::Buffer::empty(area);
-        FooterWidget::new(props.clone()).render(area, &mut buf);
-        let idle: String = (0..area.width).map(|x| buf[(x, 0)].symbol()).collect();
-
-        props.working_strip_frame = Some(600);
-        let mut buf2 = ratatui::buffer::Buffer::empty(area);
-        FooterWidget::new(props).render(area, &mut buf2);
-        let active: String = (0..area.width).map(|x| buf2[(x, 0)].symbol()).collect();
-
-        assert_ne!(
-            idle, active,
-            "active footer must visibly differ from idle one"
-        );
-        assert!(
-            active
-                .chars()
-                .any(|glyph| super::WAVE_GLYPHS.contains(&glyph)),
-            "active strip must contain at least one animation glyph: {active:?}",
-        );
-    }
-
-    #[test]
-    fn working_strip_changes_at_repaint_cadence() {
-        let width = 60;
-        let f0 = super::footer_working_strip_string(width, 0);
-        let f80 = super::footer_working_strip_string(width, 80);
-        let changed = f0
-            .chars()
-            .zip(f80.chars())
-            .filter(|(before, after)| before != after)
-            .count();
-        assert!(
-            changed > width / 4,
-            "expected the wave to drift across one 80ms repaint; changed {changed}/{width}"
-        );
-    }
-
-    #[test]
-    fn working_strip_renders_multiple_wave_heights() {
-        let s = super::footer_working_strip_string(60, 0);
-        let mut distinct = Vec::new();
-        for glyph in s.chars() {
-            if super::WAVE_GLYPHS.contains(&glyph) && !distinct.contains(&glyph) {
-                distinct.push(glyph);
-            }
-        }
-        assert!(
-            distinct.len() >= 5,
-            "expected several wave heights, saw {distinct:?}",
-        );
     }
 
     #[test]
@@ -1202,9 +1317,7 @@ mod tests {
         FooterProps::from_app(
             &app,
             None,
-            // Production state labels are `&'static str`; for tests we leak a
-            // copy to match that lifetime.
-            Box::leak(state.to_string().into_boxed_str()),
+            state,
             palette::DEEPSEEK_SKY,
             Vec::<Span<'static>>::new(),
             Vec::<Span<'static>>::new(),
@@ -1248,7 +1361,10 @@ mod tests {
         assert!(line.contains("agent"));
         assert!(line.contains("deepseek-v4-flash"));
         assert!(!line.contains("..."), "no mid-word truncation: {line:?}");
-        assert!(line.len() <= 80, "fits in 80 cols: {line:?}");
+        assert!(
+            line.chars().count() <= 80,
+            "fits in 80 cols: {line:?}"
+        );
     }
 
     /// Status drops before the model is truncated. With a longer status label
@@ -1268,7 +1384,10 @@ mod tests {
             !line.contains("refreshing"),
             "status dropped before model truncated: {line:?}",
         );
-        assert!(line.len() <= 40, "fits in 40 cols: {line:?}");
+        assert!(
+            line.chars().count() <= 40,
+            "fits in 40 cols: {line:?}"
+        );
     }
 
     /// At 60 cols mode + model + a long status all just fit (49 cols), so the
@@ -1301,7 +1420,7 @@ mod tests {
         FooterProps::from_app(
             &app,
             None,
-            Box::leak(state.to_string().into_boxed_str()),
+            state,
             palette::DEEPSEEK_SKY,
             Vec::<Span<'static>>::new(),
             Vec::<Span<'static>>::new(),
@@ -1343,6 +1462,98 @@ mod tests {
             "oversized right chip should drop instead of crowding the row: {line:?}",
         );
         assert!(line.width() <= 40, "footer must fit in one row: {line:?}");
+    }
+
+    /// Repro for the user-reported "right edge overflow with `Ctrl+O Activity:
+    /// thinking` + ctx chip" bug. The status label, the cost+saved hint, and
+    /// the ctx chip all stay alive at any reasonable width — but the painted
+    /// row must never exceed `area.width`. The overflow guard needs to keep
+    /// shrinking until *every* combination fits.
+    #[test]
+    fn render_does_not_overflow_with_long_status_and_ctx_chip() {
+        let mut app = make_app();
+        // Drive context_signal_spans to produce a non-trivial ctx chip.
+        app.session.last_prompt_tokens = Some(690_000);
+        let mut props = FooterProps::from_app(
+            &app,
+            None,
+            "Ctrl+O Activity: thinking",
+            palette::TEXT_MUTED,
+            Vec::<Span<'static>>::new(),
+            Vec::<Span<'static>>::new(),
+            Vec::<Span<'static>>::new(),
+            Vec::<Span<'static>>::new(),
+            vec![
+                Span::styled("¥0.16".to_string(), Style::default()),
+                Span::styled(
+                    " · saved ¥1.98".to_string(),
+                    Style::default().fg(palette::STATUS_SUCCESS),
+                ),
+            ],
+            Vec::<Span<'static>>::new(),
+        );
+        props.retry = crate::retry_status::RetryState::Idle;
+
+        for width in [60, 70, 80, 88, 100, 120, 140] {
+            let line = render_at_width(props.clone(), width);
+            assert!(
+                line.width() <= width as usize,
+                "footer at width={width} overflowed: rendered_width={} line={line:?}",
+                line.width()
+            );
+        }
+    }
+
+    /// Tighter repro for the user-reported screenshot — the production state
+    /// label tail is `Activity: thinking` (no `Ctrl+O` prefix on every locale)
+    /// or `Activity: tool/<name>`. Combined with a long mode label, model,
+    /// cost+saved hint, and the ctx chip, the row must still fit at any
+    /// terminal width.
+    #[test]
+    fn render_does_not_overflow_with_max_realistic_left_and_full_right_cluster() {
+        let mut app = make_app();
+        app.session.last_prompt_tokens = Some(690_000);
+        let mut props = FooterProps::from_app(
+            &app,
+            None,
+            // Worst-case status seen in the screenshot: includes the
+            // `Ctrl+O` affordance hint and an activity label that survives
+            // the priority cascade. Together with the model + cost line
+            // this is ~73 cols of left content.
+            "Ctrl+O Activity: thinking",
+            palette::TEXT_MUTED,
+            Vec::<Span<'static>>::new(),
+            Vec::<Span<'static>>::new(),
+            Vec::<Span<'static>>::new(),
+            Vec::<Span<'static>>::new(),
+            vec![
+                Span::styled("¥0.16".to_string(), Style::default()),
+                Span::styled(
+                    " · saved ¥1.98".to_string(),
+                    Style::default().fg(palette::STATUS_SUCCESS),
+                ),
+            ],
+            Vec::<Span<'static>>::new(),
+        );
+        props.retry = crate::retry_status::RetryState::Idle;
+        // Also exercise a non-empty `receipts` (turn token/cost summary)
+        // since that's the chip that sits between worked and version in
+        // the right cluster.
+        props.receipts = vec![Span::styled(
+            "+ 12.5k in / 3.2k out".to_string(),
+            Style::default().fg(palette::STATUS_SUCCESS),
+        )];
+
+        // Sweep through every plausible single-row terminal width, including
+        // the borderline 85–95 col range where the screenshot fell off.
+        for width in 50u16..=160 {
+            let line = render_at_width(props.clone(), width);
+            assert!(
+                line.width() <= width as usize,
+                "footer at width={width} overflowed: rendered_width={} line={line:?}",
+                line.width()
+            );
+        }
     }
 
     #[test]

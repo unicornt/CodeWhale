@@ -10,6 +10,7 @@ pub mod key_hint;
 // the composer area in `ui.rs`. `pub mod` (vs the usual `pub use` pattern)
 // keeps the unused-imports lint quiet until then.
 pub mod agent_card;
+pub(crate) mod chips;
 pub mod decision_card;
 pub mod pending_input_preview;
 mod renderable;
@@ -19,7 +20,11 @@ pub use footer::{
     FooterProps, FooterToast, FooterWidget, footer_agents_chip, footer_shell_chip,
     footer_working_label,
 };
-pub use header::{HeaderData, HeaderWidget, header_status_indicator_frame};
+// `HeaderData` / `HeaderWidget` are no longer wired into the live render
+// path after phase 4 (footer absorbed all header chips). They stay compiled
+// inside `header.rs` for a future `/status` / onboarding embed, but we no
+// longer surface them here — the footer reaches into `super::header::*`
+// directly for `header_status_indicator_frame`.
 pub use renderable::Renderable;
 
 use std::time::Duration;
@@ -1942,45 +1947,18 @@ fn vim_mode_style(mode: VimMode) -> Style {
 }
 
 fn composer_top_right_chrome(app: &App, area_width: u16) -> Option<Line<'static>> {
-    let receipt = app.active_receipt_text();
     let session_title = app.session_title.as_deref();
-    if !app.composer.vim_enabled && receipt.is_none() && session_title.is_none() {
+    if !app.composer.vim_enabled && session_title.is_none() {
         return None;
     }
 
     // Leave room for the left title and both borders. On narrow panes, skip
-    // extra chrome rather than letting status text collide with "Composer".
+    // extra chrome rather than letting status text collide with the prefix.
+    // Receipts moved to the footer's right cluster in phase 3 — see
+    // `FooterProps::receipts` — so they no longer compete for this slot.
     let max_width = usize::from(area_width.saturating_sub(18));
     if max_width < 4 {
         return None;
-    }
-
-    let receipt_style = Style::default()
-        .fg(palette::STATUS_SUCCESS)
-        .add_modifier(Modifier::DIM);
-    if let Some(receipt) = receipt {
-        let receipt_text = receipt.trim();
-        if app.composer.vim_enabled {
-            let vim_label = app.composer.vim_mode.label();
-            let vim_width = UnicodeWidthStr::width(vim_label);
-            let sep_width = UnicodeWidthStr::width(" · ");
-            if vim_width + sep_width + 4 <= max_width {
-                let receipt_width = max_width.saturating_sub(vim_width + sep_width);
-                return Some(Line::from(vec![
-                    Span::styled(vim_label.to_string(), vim_mode_style(app.composer.vim_mode)),
-                    Span::styled(" · ", Style::default().fg(palette::TEXT_MUTED)),
-                    Span::styled(
-                        truncate_display_width(receipt_text, receipt_width),
-                        receipt_style,
-                    ),
-                ]));
-            }
-        }
-
-        return Some(Line::from(Span::styled(
-            truncate_display_width(receipt_text, max_width),
-            receipt_style,
-        )));
     }
 
     let mut spans: Vec<Span> = Vec::new();
@@ -2032,7 +2010,7 @@ fn build_empty_state_lines(app: &App, area: Rect) -> Vec<Line<'static>> {
         Line::from(vec![
             Span::raw(inset.clone()),
             Span::styled(
-                "✻ ",
+                "\u{1F40B} ",
                 Style::default().fg(palette::ACCENT_PRIMARY).bold(),
             ),
             Span::styled(
@@ -2080,8 +2058,10 @@ fn build_empty_state_lines(app: &App, area: Rect) -> Vec<Line<'static>> {
         ]),
     ];
 
-    // Keep the welcome block near the top of the chat pane (header is separate).
-    let top_padding = 2usize;
+    // Phase 4: the persistent header is gone, so the welcome block now sits
+    // at row 0. Add a 3-row breathing margin above it so it doesn't slam
+    // against the very top of the terminal.
+    let top_padding = 3usize;
     let mut lines = Vec::new();
     for _ in 0..top_padding {
         lines.push(Line::from(""));
@@ -2100,7 +2080,7 @@ fn composer_top_padding(content_lines: usize, rows_budget: usize) -> usize {
 
 /// Placeholder text shown when the composer input is empty.
 #[cfg(test)]
-const COMPOSER_PLACEHOLDER: &str = "Try \"fix ...\" or /help";
+const COMPOSER_PLACEHOLDER: &str = "Write a task or use /.";
 
 /// How many visual rows the empty-input placeholder occupies after wrapping.
 #[cfg(test)]
@@ -3283,7 +3263,7 @@ mod tests {
 
         // inner_area: {x:2, y:1, w:12, h:3}  (top/bottom dividers + prefix 2)
         // input_rows_budget = 3
-        // placeholder_visual_lines(12) = 2  ("Try \"fix ...\"" / "or /help")
+        // placeholder_visual_lines(12) = 2  ("Write a task" / " or use /.")
         // top_padding = 3 - clamp(2, 1, 3) = 1
         // cursor_x = 0 + (2-0) + 0 = 2
         // cursor_y = 0 + (1-0) + (1+0) = 2
@@ -3314,7 +3294,11 @@ mod tests {
     }
 
     #[test]
-    fn composer_border_renders_active_turn_receipt() {
+    fn composer_border_does_not_render_active_turn_receipt() {
+        // Phase 3: receipts moved from the composer's title-top chrome to
+        // FooterProps::receipts so they no longer compete with the prefix
+        // for visible space. The composer surface should now ignore the
+        // active receipt entirely.
         let mut app = create_test_app();
         app.composer_density = ComposerDensity::Comfortable;
         app.set_receipt_text("✓ turn completed · 2 tool(s) used");
@@ -3332,8 +3316,8 @@ mod tests {
         widget.render(area, &mut buf);
         let rendered = buffer_text(&buf, area);
 
-        assert!(rendered.contains("turn completed"));
-        assert!(rendered.contains("tool(s) used"));
+        assert!(!rendered.contains("turn completed"));
+        assert!(!rendered.contains("tool(s) used"));
     }
 
     #[test]
@@ -3473,7 +3457,7 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
 
-        assert!(rendered.contains("✻ Welcome to CodeWhale"));
+        assert!(rendered.contains("\u{1F40B} Welcome to CodeWhale"));
         assert!(rendered.contains("model: deepseek-v4-pro"));
         assert!(rendered.contains("cwd: /tmp/codewhale-test-workspace"));
         assert!(rendered.contains(&format!("v{}", env!("CARGO_PKG_VERSION"))));

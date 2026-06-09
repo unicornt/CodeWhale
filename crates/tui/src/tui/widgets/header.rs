@@ -1,4 +1,17 @@
 //! Header bar widget displaying mode, workspace/model context, and session status.
+//!
+//! Phase 4 of the Claude-style migration removed the persistent header bar at
+//! the top of the TUI; the chips that used to live here (mode, model,
+//! provider, effort, status indicator, version, ctx%) all moved into the
+//! footer. The widget is kept around because `header_status_indicator_frame`
+//! is still the source of truth for the whale/dots cycle (used by the footer's
+//! centre chip), and because the type is the natural home for an embedded
+//! one-shot render in `/status` or onboarding once we wire that up. The
+//! struct/methods are intentionally kept compiled to avoid bit-rot during
+//! that re-introduction.
+
+#![allow(dead_code)]
+
 
 use std::time::Instant;
 
