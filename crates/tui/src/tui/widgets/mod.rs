@@ -625,7 +625,13 @@ impl Renderable for ComposerWidget<'_> {
                     )])
                 })
             } else {
-                None
+                Some(Line::from(vec![
+                    Span::styled(" ? shortcuts", Style::default().fg(palette::TEXT_HINT)),
+                    Span::styled(" · ", Style::default().fg(palette::TEXT_HINT)),
+                    Span::styled("↵ send", Style::default().fg(palette::TEXT_HINT)),
+                    Span::styled(" · ", Style::default().fg(palette::TEXT_HINT)),
+                    Span::styled("esc clear ", Style::default().fg(palette::TEXT_HINT)),
+                ]))
             };
 
             let mut block = Block::default()
@@ -1977,19 +1983,55 @@ fn build_empty_state_lines(app: &App, area: Rect) -> Vec<Line<'static>> {
     let inset = " ".repeat(left_padding);
 
     let body = vec![
-        Line::from(Span::styled(
-            format!("{inset}>_ codewhale (v{})", env!("CARGO_PKG_VERSION")),
-            Style::default().fg(palette::DEEPSEEK_BLUE).bold(),
-        )),
+        Line::from(vec![
+            Span::raw(inset.clone()),
+            Span::styled(
+                "✻ ",
+                Style::default().fg(palette::ACCENT_PRIMARY).bold(),
+            ),
+            Span::styled(
+                "Welcome to CodeWhale",
+                Style::default().fg(palette::TEXT_PRIMARY).bold(),
+            ),
+        ]),
         Line::from(""),
-        Line::from(Span::styled(
-            format!("{inset}model: {}  /model to switch", app.model),
-            Style::default().fg(palette::TEXT_MUTED),
-        )),
-        Line::from(Span::styled(
-            format!("{inset}directory: {workspace}"),
-            Style::default().fg(palette::TEXT_MUTED),
-        )),
+        Line::from(vec![
+            Span::raw(format!("{inset}  ")),
+            Span::styled(
+                "/help",
+                Style::default().fg(palette::TEXT_PRIMARY),
+            ),
+            Span::styled(
+                " for commands · ",
+                Style::default().fg(palette::TEXT_HINT),
+            ),
+            Span::styled(
+                "?",
+                Style::default().fg(palette::TEXT_PRIMARY),
+            ),
+            Span::styled(
+                " for shortcuts",
+                Style::default().fg(palette::TEXT_HINT),
+            ),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::raw(format!("{inset}  ")),
+            Span::styled("cwd: ", Style::default().fg(palette::TEXT_HINT)),
+            Span::styled(
+                workspace,
+                Style::default().fg(palette::TEXT_MUTED),
+            ),
+            Span::styled("     model: ", Style::default().fg(palette::TEXT_HINT)),
+            Span::styled(
+                app.model.clone(),
+                Style::default().fg(palette::TEXT_MUTED),
+            ),
+            Span::styled(
+                format!("     v{}", env!("CARGO_PKG_VERSION")),
+                Style::default().fg(palette::TEXT_HINT),
+            ),
+        ]),
     ];
 
     // Keep the welcome block near the top of the chat pane (header is separate).
@@ -2012,7 +2054,7 @@ fn composer_top_padding(content_lines: usize, rows_budget: usize) -> usize {
 
 /// Placeholder text shown when the composer input is empty.
 #[cfg(test)]
-const COMPOSER_PLACEHOLDER: &str = "Write a task or use /.";
+const COMPOSER_PLACEHOLDER: &str = "Try \"fix ...\" or /help";
 
 /// How many visual rows the empty-input placeholder occupies after wrapping.
 #[cfg(test)]
@@ -3170,6 +3212,7 @@ mod tests {
     #[test]
     fn empty_composer_cursor_accounts_for_placeholder_wrapping() {
         let mut app = create_test_app();
+        app.ui_locale = Locale::En;
         app.composer_density = ComposerDensity::Comfortable;
         let slash_menu_entries = Vec::<SlashMenuEntry>::new();
         let mention_menu_entries = Vec::<String>::new();
@@ -3185,7 +3228,7 @@ mod tests {
 
         // inner_area: {x:1, y:1, w:12, h:3}
         // input_rows_budget = 3
-        // placeholder_visual_lines(12) = 2  ("Write a task" / " or use /.")
+        // placeholder_visual_lines(12) = 2  ("Try \"fix ...\"" / "or /help")
         // top_padding = 3 - clamp(2, 1, 3) = 1
         // cursor_x = 0 + (1-0) + 0 = 1
         // cursor_y = 0 + (1-0) + (1+0) = 2
@@ -3377,9 +3420,10 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
 
-        assert!(rendered.contains(&format!(">_ codewhale (v{})", env!("CARGO_PKG_VERSION"))));
-        assert!(rendered.contains("model: deepseek-v4-pro  /model to switch"));
-        assert!(rendered.contains("directory: /tmp/codewhale-test-workspace"));
+        assert!(rendered.contains("✻ Welcome to CodeWhale"));
+        assert!(rendered.contains("model: deepseek-v4-pro"));
+        assert!(rendered.contains("cwd: /tmp/codewhale-test-workspace"));
+        assert!(rendered.contains(&format!("v{}", env!("CARGO_PKG_VERSION"))));
     }
 
     /// Probe: confirm `cell.lines_with_motion` returns no Line whose total

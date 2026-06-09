@@ -1054,7 +1054,7 @@ fn fallback_translation(candidate: Option<&'static str>, id: MessageId) -> &'sta
 
 fn english(id: MessageId) -> &'static str {
     match id {
-        MessageId::ComposerPlaceholder => "Write a task or use /.",
+        MessageId::ComposerPlaceholder => "Try \"fix ...\" or /help",
         MessageId::HistorySearchPlaceholder => "Search prompt history...",
         MessageId::HistorySearchTitle => "History Search",
         MessageId::HistoryHintMove => "Up/Down move",
@@ -1520,7 +1520,7 @@ fn translation(locale: Locale, id: MessageId) -> Option<&'static str> {
 
 fn vietnamese(id: MessageId) -> Option<&'static str> {
     Some(match id {
-        MessageId::ComposerPlaceholder => "Nhập nhiệm vụ hoặc sử dụng /.",
+        MessageId::ComposerPlaceholder => "Thử \"sửa ...\" hoặc /help",
         MessageId::HistorySearchPlaceholder => "Tìm kiếm lịch sử câu lệnh...",
         MessageId::HistorySearchTitle => "Tìm kiếm lịch sử",
         MessageId::HistoryHintMove => "Lên/Xuống để di chuyển",
@@ -2071,7 +2071,7 @@ fn traditional_chinese(id: MessageId) -> Option<&'static str> {
 
 fn japanese(id: MessageId) -> Option<&'static str> {
     Some(match id {
-        MessageId::ComposerPlaceholder => "タスクを書くか / を使う。",
+        MessageId::ComposerPlaceholder => "「修正 ...」と入力するか /help",
         MessageId::HistorySearchPlaceholder => "プロンプト履歴を検索...",
         MessageId::HistorySearchTitle => "履歴検索",
         MessageId::HistoryHintMove => "Up/Down 移動",
@@ -2531,7 +2531,7 @@ fn japanese(id: MessageId) -> Option<&'static str> {
 
 fn chinese_simplified(id: MessageId) -> Option<&'static str> {
     Some(match id {
-        MessageId::ComposerPlaceholder => "编写任务或使用 /。",
+        MessageId::ComposerPlaceholder => "试试「修复 ...」或 /help",
         MessageId::HistorySearchPlaceholder => "搜索提示历史...",
         MessageId::HistorySearchTitle => "历史搜索",
         MessageId::HistoryHintMove => "Up/Down 移动",
@@ -2933,7 +2933,7 @@ fn chinese_simplified(id: MessageId) -> Option<&'static str> {
 
 fn portuguese_brazil(id: MessageId) -> Option<&'static str> {
     Some(match id {
-        MessageId::ComposerPlaceholder => "Escreva uma tarefa ou use /.",
+        MessageId::ComposerPlaceholder => "Tente \"corrigir ...\" ou /help",
         MessageId::HistorySearchPlaceholder => "Pesquisar histórico de prompts...",
         MessageId::HistorySearchTitle => "Busca no histórico",
         MessageId::HistoryHintMove => "Up/Down move",
@@ -3417,7 +3417,7 @@ fn portuguese_brazil(id: MessageId) -> Option<&'static str> {
 
 fn spanish_latin_america(id: MessageId) -> Option<&'static str> {
     Some(match id {
-        MessageId::ComposerPlaceholder => "Escribe una tarea o usa /.",
+        MessageId::ComposerPlaceholder => "Prueba \"arreglar ...\" o /help",
         MessageId::HistorySearchPlaceholder => "Buscar en el historial de prompts...",
         MessageId::HistorySearchTitle => "Búsqueda en el historial",
         MessageId::HistoryHintMove => "Arriba/Abajo mover",

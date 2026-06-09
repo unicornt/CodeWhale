@@ -391,7 +391,6 @@ pub const LIGHT_USER_BODY: Color = Color::Rgb(21, 128, 61); // #15803D green
 // New semantic colors for UI theming
 pub const BORDER_COLOR: Color =
     Color::Rgb(BORDER_COLOR_RGB.0, BORDER_COLOR_RGB.1, BORDER_COLOR_RGB.2);
-#[allow(dead_code)]
 pub const ACCENT_PRIMARY: Color = Color::Rgb(
     WHALE_ACCENT_PRIMARY_RGB.0,
     WHALE_ACCENT_PRIMARY_RGB.1,
