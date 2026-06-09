@@ -9,6 +9,26 @@
 
 ---
 
+## 截图
+
+启动空态——chat 区直接从 row 0 开始，没有顶部常驻 header，sidebar 跟 chat
+共享同一画布。
+
+![启动空态](docs/start_snapshot.png)
+
+运行中的一轮对话——thinking 块、tool 调用、sidebar 展示 recent tools 和
+session 信息，footer 左侧鲸鱼图标紧贴 `mode · model · cost · saved`，
+右侧 `% context left`、`Cache: hit`、`worked` 等 chip。
+
+![运行中——thinking + tool 调用](docs/running_snapshot2.png)
+
+另一轮活跃截图——以工具输出为主，展示在多个工具卡叠加时 cell rail
+仍能保持 chat 可读性。
+
+![运行中——工具调用密集](docs/running_snapshot.png)
+
+---
+
 ## 这个 fork 是什么
 
 它**不是**独立项目。是 CodeWhale 上游 agent runtime + 重写的 TUI 表现层。

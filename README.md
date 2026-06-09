@@ -10,6 +10,28 @@
 
 ---
 
+## Demo
+
+Empty-state welcome — chat area starts at row 0, no persistent header,
+sidebar shares one canvas with the chat.
+
+![Empty-state welcome](docs/start_snapshot.png)
+
+A live turn — thinking block, tool calls, sidebar showing recent tools and
+session state, footer running the whale brand glyph next to `mode · model ·
+cost · saved`, with `% context left`, `Cache: hit` and `worked` chips on the
+right.
+
+![Active turn — thinking + tool calls](docs/running_snapshot2.png)
+
+A second active-turn snapshot — different turn, mostly tool output, showing
+how the cell rail keeps the chat readable even when several tool cards
+stack.
+
+![Active turn — tool-heavy](docs/running_snapshot.png)
+
+---
+
 ## What this fork is
 
 This is **not** a separate product. It is the upstream CodeWhale agent runtime
