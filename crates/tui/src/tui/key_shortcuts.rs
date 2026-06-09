@@ -52,6 +52,7 @@ pub(super) fn tool_details_shortcut_label() -> &'static str {
     }
 }
 
+#[allow(dead_code)]
 pub(super) fn activity_shortcut_label() -> &'static str {
     "Ctrl+O"
 }

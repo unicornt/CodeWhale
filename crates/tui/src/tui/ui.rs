@@ -132,7 +132,7 @@ use super::slash_menu::{
 };
 use super::views::{ConfigView, HelpView, ModalKind, ShellControlView, ViewEvent};
 use super::widgets::pending_input_preview::{ContextPreviewItem, PendingInputPreview};
-use super::widgets::{ChatWidget, ComposerWidget, HeaderData, HeaderWidget, Renderable};
+use super::widgets::{ChatWidget, ComposerWidget, Renderable};
 
 // === Constants ===
 
@@ -6536,7 +6536,6 @@ fn render(f: &mut Frame, app: &mut App) {
         return;
     }
 
-    let header_height = 1;
     let footer_height = 1;
     let slash_menu_entries = visible_slash_menu_entries(app, SLASH_MENU_LIMIT);
     let mention_menu_limit = app.mention_menu_limit;
@@ -6545,21 +6544,11 @@ fn render(f: &mut Frame, app: &mut App) {
     if !mention_menu_entries.is_empty() && app.mention_menu_selected >= mention_menu_entries.len() {
         app.mention_menu_selected = mention_menu_entries.len().saturating_sub(1);
     }
-    let context_usage = context_usage_snapshot(app);
 
-    // Defensive two-pass layout: pin the header to the absolute top row,
-    // then split the remaining body area for chat / preview / composer /
-    // footer. This guarantees the header is never vertically centered
-    // regardless of ratatui Flex defaults or terminal size.
-    // Fixes #1834 — macOS terminal title centering.
-    let (header_area, body_area) = {
-        let split = Layout::default()
-            .direction(Direction::Vertical)
-            .flex(ratatui::layout::Flex::Start)
-            .constraints([Constraint::Length(header_height), Constraint::Min(1)])
-            .split(size);
-        (split[0], split[1])
-    };
+    // Phase 4: the persistent header bar is gone. Mode/model/provider/effort
+    // chips, status indicator, and version label have all moved into the
+    // footer. The chat area now starts at row 0 — `body_area = size`.
+    let body_area = size;
 
     let body_height = body_area.height;
     let composer_max_height = body_height
@@ -6593,73 +6582,11 @@ fn render(f: &mut Frame, app: &mut App) {
         ])
         .split(body_area);
 
-    // Render header
-    {
-        let sanitized_context_window = context_usage
-            .as_ref()
-            .map(|(_, max, _)| *max)
-            .or_else(|| crate::models::context_window_for_model(&app.model));
-        let sanitized_prompt_tokens = context_usage
-            .as_ref()
-            .and_then(|(used, _, _)| u32::try_from(*used).ok());
-        let workspace_name = app
-            .workspace
-            .file_name()
-            .and_then(|value| value.to_str())
-            .filter(|value| !value.is_empty())
-            .unwrap_or("workspace");
-        let model_label = app.model_display_label();
-        let effort_label = app.reasoning_effort_display_label();
-        let provider_label = match app.api_provider {
-            crate::config::ApiProvider::Deepseek => None,
-            crate::config::ApiProvider::DeepseekCN => None,
-            crate::config::ApiProvider::NvidiaNim => Some("NIM"),
-            crate::config::ApiProvider::Openai => Some("OpenAI"),
-            crate::config::ApiProvider::Atlascloud => Some("Atlas"),
-            crate::config::ApiProvider::WanjieArk => Some("Wanjie"),
-            crate::config::ApiProvider::Volcengine => Some("Volc"),
-            crate::config::ApiProvider::Openrouter => Some("OR"),
-            crate::config::ApiProvider::XiaomiMimo => Some("MiMo"),
-            crate::config::ApiProvider::Novita => Some("Novita"),
-            crate::config::ApiProvider::Fireworks => Some("Fireworks"),
-            crate::config::ApiProvider::Siliconflow | ApiProvider::SiliconflowCn => {
-                Some("SiliconFlow")
-            }
-            crate::config::ApiProvider::Arcee => Some("Arcee"),
-            crate::config::ApiProvider::Moonshot => Some("Kimi"),
-            crate::config::ApiProvider::Sglang => Some("SGLang"),
-            crate::config::ApiProvider::Vllm => Some("vLLM"),
-            crate::config::ApiProvider::Ollama => Some("Ollama"),
-            crate::config::ApiProvider::Huggingface => Some("HF"),
-        };
-        let status_indicator_started_at = if app.low_motion {
-            None
-        } else {
-            app.turn_started_at
-        };
-        let header_data = HeaderData::new(
-            app.mode,
-            &model_label,
-            workspace_name,
-            app.is_loading,
-            app.ui_theme.header_bg,
-        )
-        .with_usage(
-            app.session.total_conversation_tokens,
-            sanitized_context_window,
-            app.session.session_cost,
-            sanitized_prompt_tokens,
-        )
-        .with_reasoning_effort(Some(&effort_label))
-        .with_provider(provider_label)
-        .with_status_indicator(crate::tui::widgets::header_status_indicator_frame(
-            status_indicator_started_at,
-            &app.status_indicator,
-        ));
-        let header_widget = HeaderWidget::new(header_data);
-        let buf = f.buffer_mut();
-        header_widget.render(header_area, buf);
-    }
+    // Phase 4: persistent header has been removed. Mode/model/provider/effort
+    // chips, status indicator, context%, and version label are surfaced by
+    // `FooterWidget` instead. `HeaderData`/`HeaderWidget` live on for
+    // `/status` and onboarding embedded surfaces but are no longer painted at
+    // the absolute top row.
 
     // Render chat + sidebar + optional file-tree pane
     {
@@ -6741,18 +6668,25 @@ fn render(f: &mut Frame, app: &mut App) {
                     && col == handle_rect.x
             });
 
+            // Phase 5: resize handle reads as a quiet vertical rule by
+            // default — a single dim `│` over the chat background — and only
+            // lights up on hover/drag. The pre-phase-5 version painted a
+            // solid colour block on every frame, which competed visually
+            // with the sidebar content despite never being acted on by the
+            // user 99% of the time.
             let handle_style = if app.sidebar_resizing {
+                // Actively dragging: accent fg + accent bg so the user has
+                // unambiguous "I am moving this" feedback.
                 Style::default()
-                    .bg(palette::DEEPSEEK_BLUE)
+                    .bg(palette::ACCENT_PRIMARY)
                     .fg(palette::TEXT_PRIMARY)
             } else if mouse_over {
-                Style::default()
-                    .bg(palette::STATUS_WARNING)
-                    .fg(palette::TEXT_MUTED)
+                // Hover: light the glyph up in the accent colour but leave
+                // the background transparent so it doesn't read as a block.
+                Style::default().fg(palette::ACCENT_PRIMARY)
             } else {
-                Style::default()
-                    .bg(palette::DEEPSEEK_SLATE)
-                    .fg(palette::TEXT_MUTED)
+                // Idle: dim rule that recedes into the chrome.
+                Style::default().fg(palette::BORDER_COLOR)
             };
 
             let buf = f.buffer_mut();
@@ -9117,6 +9051,13 @@ fn detail_target_cell_index(app: &App) -> Option<usize> {
     .or_else(|| app.history.len().checked_sub(1))
 }
 
+// The idle-state footer fallback that consumed this label was removed in
+// phase 5 follow-up (sidebar's "recent tools" panel already shows the same
+// information). The function — and the helper below — are kept compiled so
+// the existing contract tests in `ui/tests.rs` keep guarding against
+// regressions in the label formatting, in case a future surface (e.g. a
+// `/status` overlay) wants to re-use it.
+#[allow(dead_code)]
 pub(crate) fn selected_detail_footer_label(app: &App) -> Option<String> {
     if app.viewport.transcript_selection.is_active() {
         return None;
@@ -9140,6 +9081,7 @@ pub(crate) fn selected_detail_footer_label(app: &App) -> Option<String> {
     ))
 }
 
+#[allow(dead_code)]
 fn activity_footer_target_cell_index(app: &App) -> Option<usize> {
     let line_meta = app.viewport.transcript_cache.line_meta();
     let start = app

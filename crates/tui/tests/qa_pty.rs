@@ -78,23 +78,39 @@ fn write_skill(root: std::path::PathBuf, name: &str, description: &str) -> anyho
     Ok(())
 }
 
-fn first_non_blank_row(frame: &qa_harness::Frame) -> Option<u16> {
-    (0..frame.rows()).find(|&row| !frame.row(row).trim().is_empty())
-}
-
 fn assert_viewport_starts_at_top(frame: &qa_harness::Frame) {
     let dump = frame.debug_dump();
-    let first_row = first_non_blank_row(frame).expect("expected visible frame text");
-    assert_eq!(
-        first_row, 0,
-        "viewport content drifted below row 0:\n{dump}"
-    );
+    // After phase 4 the persistent header bar is gone; the chat-area top
+    // (row 0) is intentionally empty so the welcome block can have a 3-row
+    // breathing margin. The regression we're protecting against (#1085) is
+    // scroll-region drift pushing the *entire* TUI below row 0 — visible as
+    // the sidebar starting on row N>0 instead of row 0. The sidebar's
+    // top-most panel header (work / tasks / agents / context — lowercased
+    // in phase 5) is always painted on row 0 by the sidebar widget, so it
+    // serves as a stable row-0 anchor.
+    let first_row = frame.row(0);
+    let needles = [
+        "work",
+        "tasks",
+        "agents",
+        "context",
+        // Legacy capitalized fallback in case any future surface re-cases
+        // the panel titles.
+        "Work",
+        "Tasks",
+        "Agents",
+        "Context",
+        // Pre-phase-5 header chip fallback (kept so a roll-back doesn't
+        // silently lose the assertion).
+        "Plan",
+        "Agent",
+        "Yolo",
+        "DeepSeek",
+    ];
     assert!(
-        frame.row(0).contains("Plan")
-            || frame.row(0).contains("Agent")
-            || frame.row(0).contains("Yolo")
-            || frame.row(0).contains("DeepSeek"),
-        "expected header content on row 0:\n{dump}"
+        needles.iter().any(|needle| first_row.contains(needle)),
+        "viewport drifted below row 0 (expected a sidebar panel header on \
+         row 0):\n{dump}"
     );
 }
 
@@ -106,8 +122,10 @@ fn smoke_boot_paints_composer() -> anyhow::Result<()> {
     let _guard = qa_pty_test_lock();
     let (_ws, mut h) = boot_minimal()?;
 
-    // The composer panel border is labelled "Composer" — wait for it.
-    h.wait_for_text("Composer", BOOT_TIMEOUT)?;
+    // After phase 2 the composer no longer has a "Composer" border title;
+    // the placeholder `Try "fix ..." or /help` is the most stable
+    // boot-complete marker.
+    h.wait_for_text("/help", BOOT_TIMEOUT)?;
 
     let f = h.frame();
     assert!(
@@ -126,7 +144,7 @@ fn smoke_boot_paints_composer() -> anyhow::Result<()> {
 fn viewport_origin_stays_row_zero_after_failed_turn() -> anyhow::Result<()> {
     let _guard = qa_pty_test_lock();
     let (_ws, mut h) = boot_minimal_without_retry()?;
-    h.wait_for_text("Composer", BOOT_TIMEOUT)?;
+    h.wait_for_text("/help", BOOT_TIMEOUT)?;
     assert_viewport_starts_at_top(h.frame());
 
     h.send(keys::key::text("trigger a failed turn"))?;
@@ -154,7 +172,7 @@ fn viewport_origin_stays_row_zero_after_failed_turn() -> anyhow::Result<()> {
 fn smoke_keystroke_reaches_composer() -> anyhow::Result<()> {
     let _guard = qa_pty_test_lock();
     let (_ws, mut h) = boot_minimal()?;
-    h.wait_for_text("Composer", BOOT_TIMEOUT)?;
+    h.wait_for_text("/help", BOOT_TIMEOUT)?;
 
     h.send(keys::key::text("hello-from-pty"))?;
     h.wait_for_text("hello-from-pty", KEY_TIMEOUT)?;
@@ -192,7 +210,7 @@ fn skills_menu_shows_local_and_global_skills() -> anyhow::Result<()> {
         .size(40, 140)
         .spawn()?;
 
-    h.wait_for_text("Composer", BOOT_TIMEOUT)?;
+    h.wait_for_text("/help", BOOT_TIMEOUT)?;
     h.send(keys::key::text("/skills"))?;
     h.wait_for_text("/skills", KEY_TIMEOUT)?;
     h.wait_for_idle(Duration::from_millis(300), Duration::from_secs(2))?;
@@ -225,7 +243,7 @@ fn skills_menu_shows_local_and_global_skills() -> anyhow::Result<()> {
 fn paste_bracketed_with_trailing_newline_does_not_autosubmit() -> anyhow::Result<()> {
     let _guard = qa_pty_test_lock();
     let (_ws, mut h) = boot_minimal()?;
-    h.wait_for_text("Composer", BOOT_TIMEOUT)?;
+    h.wait_for_text("/help", BOOT_TIMEOUT)?;
 
     // ~200 chars matching the original report. Trailing newline is the
     // payload that historically triggered the auto-submit.
@@ -266,7 +284,7 @@ fn paste_bracketed_with_trailing_newline_does_not_autosubmit() -> anyhow::Result
 fn paste_unbracketed_with_trailing_newline_does_not_autosubmit() -> anyhow::Result<()> {
     let _guard = qa_pty_test_lock();
     let (_ws, mut h) = boot_minimal()?;
-    h.wait_for_text("Composer", BOOT_TIMEOUT)?;
+    h.wait_for_text("/help", BOOT_TIMEOUT)?;
     // Let the boot fully settle so input handling is wired up.
     h.wait_for_idle(Duration::from_millis(300), Duration::from_secs(3))?;
 
