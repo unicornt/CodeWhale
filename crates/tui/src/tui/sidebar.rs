@@ -15,7 +15,7 @@ use ratatui::{
     prelude::Widget,
     style::Style,
     text::{Line, Span},
-    widgets::{Block, Paragraph, Wrap},
+    widgets::{Block, Borders, Paragraph, Wrap},
 };
 
 use crate::deepseek_theme::Theme;
@@ -576,8 +576,8 @@ fn render_sidebar_work(f: &mut Frame, area: Rect, app: &mut App) {
         return;
     }
 
-    let content_width = area.width.saturating_sub(4) as usize;
-    let usable_rows = area.height.saturating_sub(3) as usize;
+    let content_width = area.width.saturating_sub(2) as usize;
+    let usable_rows = area.height.saturating_sub(1) as usize;
     let summary = sidebar_work_summary(app);
     let lines = work_panel_lines(
         &summary,
@@ -596,8 +596,8 @@ fn render_sidebar_tasks(f: &mut Frame, area: Rect, app: &mut App) {
         return;
     }
 
-    let content_width = area.width.saturating_sub(4) as usize;
-    let usable_rows = area.height.saturating_sub(3) as usize;
+    let content_width = area.width.saturating_sub(2) as usize;
+    let usable_rows = area.height.saturating_sub(1) as usize;
     let lines = task_panel_lines(app, content_width.max(1), usable_rows.max(1));
 
     let full_texts: Vec<String> = lines.iter().map(|l| spans_to_text(&l.spans)).collect();
@@ -1469,8 +1469,8 @@ fn render_sidebar_subagents(f: &mut Frame, area: Rect, app: &mut App) {
         return;
     }
 
-    let content_width = area.width.saturating_sub(4) as usize;
-    let usable_rows = area.height.saturating_sub(3) as usize;
+    let content_width = area.width.saturating_sub(2) as usize;
+    let usable_rows = area.height.saturating_sub(1) as usize;
     let cached_ids: std::collections::HashSet<&str> = app
         .subagent_cache
         .iter()
@@ -1768,7 +1768,7 @@ fn render_context_panel(f: &mut Frame, area: Rect, app: &mut App) {
     }
 
     let theme = &app.ui_theme;
-    let content_width = area.width.saturating_sub(4) as usize;
+    let content_width = area.width.saturating_sub(2) as usize;
     let mut lines: Vec<Line<'static>> = Vec::with_capacity(usize::from(area.height).max(4));
 
     // ── Working set ──────────────────────────────────────────────
@@ -1790,6 +1790,11 @@ fn render_context_panel(f: &mut Frame, area: Rect, app: &mut App) {
     ]));
 
     // ── Token usage ──────────────────────────────────────────────
+    //
+    // Previously this rendered an inline ASCII progress bar
+    // (`[████░░░░] 53%`) after the count, but in narrow panels the bar
+    // truncated mid-character and read as a grey blob. Drop the bar; the
+    // footer's `ctx` chip already shows the live utilisation visualisation.
     let total_tokens = app.session.total_conversation_tokens;
     let window = crate::models::context_window_for_model(&app.model).unwrap_or(1_048_576);
     let pct = if window > 0 {
@@ -1797,21 +1802,8 @@ fn render_context_panel(f: &mut Frame, area: Rect, app: &mut App) {
     } else {
         0.0
     };
-    let bar_width = content_width.min(20);
-    let filled = ((pct / 100.0) * bar_width as f64) as usize;
-    let bar = format!(
-        "[{}{}] {:.0}%",
-        "█".repeat(filled),
-        "░".repeat(bar_width.saturating_sub(filled)),
-        pct
-    );
     lines.push(Line::from(Span::styled(
-        format!(
-            "context: {}/{} tokens  {}",
-            total_tokens,
-            window,
-            truncate_line_to_width(&bar, content_width.saturating_sub(32).max(8))
-        ),
+        format!("context: {total_tokens}/{window} tokens ({pct:.0}%)"),
         Style::default().fg(theme.text_muted),
     )));
 
@@ -1910,31 +1902,55 @@ fn render_sidebar_section(
 
     let theme = Theme::for_palette_mode(app.ui_theme.mode);
 
-    // Record hover metadata for mouse tooltip support.
+    // Phase 5: panels now share one canvas with the chat area (top-only
+    // border, no panel bg). Content sits at y + 1 (skipping the rule),
+    // body width = full area width minus horizontal padding only.
     let padding = theme.section_padding;
+    let border_rows: u16 = if theme.section_borders.contains(Borders::TOP) {
+        1
+    } else {
+        0
+    } + if theme.section_borders.contains(Borders::BOTTOM) {
+        1
+    } else {
+        0
+    };
+    let top_border_rows: u16 = if theme.section_borders.contains(Borders::TOP) {
+        1
+    } else {
+        0
+    };
+
+    // Record hover metadata for mouse tooltip support.
     let content_area = Rect {
-        x: area.x + 1 + padding.left,
-        y: area.y + 1 + padding.top,
-        width: area.width.saturating_sub(2 + padding.left + padding.right),
-        height: area.height.saturating_sub(2 + padding.top + padding.bottom),
+        x: area.x + padding.left,
+        y: area.y + top_border_rows + padding.top,
+        width: area.width.saturating_sub(padding.left + padding.right),
+        height: area
+            .height
+            .saturating_sub(border_rows + padding.top + padding.bottom),
     };
     app.sidebar_hover.sections.push(SidebarHoverSection {
         content_area,
         lines: full_texts,
     });
-    // Truncate the panel title so it always fits within the section width
-    // even after a resize. The title occupies up to 4 chars of border chrome
-    // (two spaces + one space on each side), so the max title length is
-    // area.width.saturating_sub(4) when borders are enabled.
-    let max_title_width = area.width.saturating_sub(4).max(1) as usize;
-    let display_title = truncate_line_to_width(title, max_title_width);
+    // Lowercase small-caps title — Claude-style "work / tasks / agents /
+    // context" instead of capitalized headings. Title sits in the top-rule
+    // gap, so it needs ~3 chars of chrome budget (leading space + trailing
+    // ` ─` continuation).
+    let display_title = {
+        let lowered = title.to_lowercase();
+        let max_title_width = area.width.saturating_sub(3).max(1) as usize;
+        truncate_line_to_width(&lowered, max_title_width)
+    };
 
     // Constrain lines to the visible section area so a Paragraph wrap
-    // overflow can't write cells outside the Block bounds (#400). The
-    // border + padding consume 2 rows; budget the rest for content.
+    // overflow can't write cells outside the Block bounds (#400). With
+    // top-only border + padding the body height is area.height − 1 (top
+    // rule) − vertical padding.
     let visible_content_rows = area
         .height
-        .saturating_sub(2) // top + bottom border
+        .saturating_sub(border_rows)
         .saturating_sub(theme.section_padding.top + theme.section_padding.bottom)
         as usize;
     let lines: Vec<Line<'static>> =
@@ -1948,7 +1964,7 @@ fn render_sidebar_section(
         Block::default()
             .title(Line::from(vec![Span::styled(
                 format!(" {display_title} "),
-                Style::default().fg(theme.section_title_color).bold(),
+                Style::default().fg(theme.section_title_color),
             )]))
             .borders(theme.section_borders)
             .border_type(theme.section_border_type)

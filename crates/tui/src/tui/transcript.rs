@@ -479,6 +479,9 @@ fn line_with_group_rail(
 ///   `▶ `, `⋮⋮ `). The entire span width is accumulated.
 /// * Pattern B — span is `"<glyph>"` (1 drawing char) followed by a lone
 ///   space span `" "` (e.g. `●` then ` `, `▎` then ` `).
+/// * Pattern C — span starts with the two-space rail spacer used by the
+///   Claude-style transcript / reasoning blocks (TRANSCRIPT_RAIL = "  ").
+///   Only the leading two spaces count as the prefix.
 ///
 /// Stops at the first non-matching span. Every decorated glyph used by the
 /// TUI is a single display-column character, so char-count = display width.
@@ -515,6 +518,14 @@ fn compute_rail_prefix_width(line: &Line<'static>) -> usize {
             total += 2;
             i += 2;
             continue;
+        }
+
+        // Pattern C — first span starts with the 2-space rail spacer
+        // (TRANSCRIPT_RAIL / REASONING_RAIL after the box-frame removal).
+        // Only consume the leading two spaces; the rest is real content.
+        if total == 0 && content.starts_with("  ") {
+            total += 2;
+            break;
         }
 
         break;

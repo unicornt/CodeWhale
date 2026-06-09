@@ -62,11 +62,25 @@ impl Theme {
     pub const fn dark() -> Self {
         Self {
             variant: Variant::Dark,
-            section_borders: Borders::ALL,
+            // Phase 5: drop the full `Borders::ALL` frame around each sidebar
+            // panel. A single dim top line + small-caps title now does the
+            // section-grouping work, matching Claude Code's chrome-light
+            // sidebar style. The panel body inherits the chat surface_bg so
+            // sidebar and chat share one canvas.
+            section_borders: Borders::TOP,
             section_border_type: BorderType::Plain,
             section_border_color: palette::BORDER_COLOR,
+            // Phase 5 follow-up: keep the panel cream so the sidebar rail
+            // reads as a distinct (slightly deeper) surface against the
+            // chat `surface_bg`. We tried `Color::Reset` to let an outer
+            // sidebar fill show through, but ratatui treats `Reset` as a
+            // *write*, blanking whatever was painted underneath — the
+            // sidebar just inherited the chat bg. So the section paints
+            // its own deeper bg explicitly.
             section_bg: palette::DEEPSEEK_INK,
-            section_title_color: palette::DEEPSEEK_BLUE,
+            // Dim small-caps title — readable but recedes against the
+            // top-line rule.
+            section_title_color: palette::TEXT_HINT,
             // Horizontal padding only. `Padding::uniform(1)` ate two rows of
             // each sidebar panel — for compact terminals where Work/Tasks/Agents
             // get ~3 rows total via the 25% layout split, that left zero rows
@@ -93,11 +107,11 @@ impl Theme {
     pub const fn light() -> Self {
         Self {
             variant: Variant::Light,
-            section_borders: Borders::ALL,
+            section_borders: Borders::TOP,
             section_border_type: BorderType::Plain,
             section_border_color: palette::LIGHT_BORDER,
             section_bg: palette::LIGHT_PANEL,
-            section_title_color: palette::DEEPSEEK_BLUE,
+            section_title_color: palette::LIGHT_TEXT_HINT,
             section_padding: Padding::horizontal(1),
             tool_title_color: palette::LIGHT_TEXT_SOFT,
             tool_value_color: palette::LIGHT_TEXT_MUTED,
@@ -119,11 +133,11 @@ impl Theme {
     pub const fn solarized_light() -> Self {
         Self {
             variant: Variant::Light,
-            section_borders: Borders::ALL,
+            section_borders: Borders::TOP,
             section_border_type: BorderType::Plain,
             section_border_color: palette::SOLARIZED_BORDER,
             section_bg: palette::SOLARIZED_PANEL,
-            section_title_color: palette::SOLARIZED_BLUE,
+            section_title_color: palette::SOLARIZED_TEXT_HINT,
             section_padding: Padding::horizontal(1),
             tool_title_color: palette::SOLARIZED_TEXT_SOFT,
             tool_value_color: palette::SOLARIZED_TEXT_MUTED,
@@ -145,11 +159,11 @@ impl Theme {
     pub const fn grayscale() -> Self {
         Self {
             variant: Variant::Grayscale,
-            section_borders: Borders::ALL,
+            section_borders: Borders::TOP,
             section_border_type: BorderType::Plain,
             section_border_color: palette::GRAYSCALE_BORDER,
             section_bg: palette::GRAYSCALE_PANEL,
-            section_title_color: palette::GRAYSCALE_TEXT_SOFT,
+            section_title_color: palette::GRAYSCALE_TEXT_HINT,
             section_padding: Padding::horizontal(1),
             tool_title_color: palette::GRAYSCALE_TEXT_SOFT,
             tool_value_color: palette::GRAYSCALE_TEXT_MUTED,
@@ -235,8 +249,11 @@ mod tests {
         let theme = Theme::dark();
         assert_eq!(theme.variant, Variant::Dark);
         assert_eq!(theme.section_border_color, palette::BORDER_COLOR);
+        // Phase 5 follow-up: section paints `panel_bg` explicitly so the
+        // sidebar reads as a distinct surface against the chat `surface_bg`.
+        // (We tried `Color::Reset` but it blanks any underlying fill.)
         assert_eq!(theme.section_bg, palette::DEEPSEEK_INK);
-        assert_eq!(theme.section_title_color, palette::DEEPSEEK_BLUE);
+        assert_eq!(theme.section_title_color, palette::TEXT_HINT);
         assert_eq!(theme.tool_title_color, palette::TEXT_SOFT);
         assert_eq!(theme.tool_value_color, palette::TEXT_MUTED);
         assert_eq!(theme.tool_label_color, palette::TEXT_DIM);
@@ -265,6 +282,25 @@ mod tests {
         assert_eq!(theme.tool_running_accent, palette::GRAYSCALE_TEXT_SOFT);
         assert_eq!(theme.tool_failed_accent, palette::GRAYSCALE_TEXT_BODY);
         assert_eq!(theme.plan_summary_color, palette::GRAYSCALE_TEXT_MUTED);
+    }
+
+    #[test]
+    fn all_themes_use_top_only_section_borders() {
+        // Phase 5 contract: sidebar panels are grouped by a single top rule,
+        // not a full bordered box. Locks the regression target.
+        for theme in [
+            Theme::dark(),
+            Theme::light(),
+            Theme::solarized_light(),
+            Theme::grayscale(),
+        ] {
+            assert_eq!(
+                theme.section_borders,
+                ratatui::widgets::Borders::TOP,
+                "{:?} variant must use Borders::TOP only",
+                theme.variant
+            );
+        }
     }
 
     #[test]

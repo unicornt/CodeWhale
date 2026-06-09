@@ -1146,8 +1146,8 @@ pub const CLAUDE_LIGHT_UI_THEME: UiTheme = UiTheme {
     mode: PaletteMode::Light,
     // Anthropic brand surfaces — Soft Cloud cream paper
     surface_bg: Color::Rgb(0xfa, 0xf9, 0xf5), // Soft Cloud
-    panel_bg: Color::Rgb(0xf0, 0xed, 0xe5),   // sidebar / dialog cream
-    elevated_bg: Color::Rgb(0xe8, 0xe4, 0xd9), // code-block cream
+    panel_bg: Color::Rgb(0xf2, 0xee, 0xe3),   // sidebar / dialog cream
+    elevated_bg: Color::Rgb(0xed, 0xe7, 0xd6), // inline code & tool surface — slightly darker than surface
     composer_bg: Color::Rgb(0xfa, 0xf9, 0xf5),
     selection_bg: Color::Rgb(0xe2, 0xd9, 0xc8), // warm tan selection
     header_bg: Color::Rgb(0xfa, 0xf9, 0xf5),

@@ -42,13 +42,16 @@ const ASSISTANT_GLYPH: &str = "\u{25CF}"; // ●
 /// used as a visual left-margin anchor for continuation lines, tool-card
 /// detail rows, and affordance lines. Dimmed so it guides the eye without
 /// competing with content.
-const TRANSCRIPT_RAIL: &str = "\u{258F} "; // ▏ + space
+const TRANSCRIPT_RAIL: &str = "  ";
 /// Reasoning header opener. Replaces the spinner glyph on thinking cells —
 /// reasoning is a slow exhale, not a tool spin.
 const REASONING_OPENER: &str = "\u{2026}"; // …
-/// Reasoning body left rail. Dashed (`╎`) instead of the solid `▏` block to
-/// visually separate reasoning from message body and tool output.
-const REASONING_RAIL: &str = "\u{254E} "; // ╎ + space
+/// Reasoning body left rail. Phase 3: the body now carries a tinted bg
+/// strip end-to-end, so the rail glyph would just compete with the colour
+/// block. Two leading spaces preserve the indent that down-stream wrap
+/// math already accounts for; switch back to a glyph if the tinted block
+/// is ever removed.
+const REASONING_RAIL: &str = "  ";
 /// Trailing-line cursor on streaming reasoning. Anchored to the live colour
 /// so the user sees where new tokens land.
 const REASONING_CURSOR: &str = "\u{258E}"; // ▎
@@ -2423,10 +2426,11 @@ fn render_message_with_copy_metadata(
             } else if rendered_line.is_code {
                 " ".repeat(prefix_width + 1)
             } else {
-                let mut s = String::with_capacity(prefix_width + 1);
-                s.push('\u{258F}');
-                s.extend(std::iter::repeat_n(' ', prefix_width));
-                s
+                // Phase 3: drop the leading `▏` rail on assistant follow-up
+                // lines. The role glyph + indent already conveys "this is the
+                // same assistant message" and the rail clutters Claude-style
+                // light themes.
+                " ".repeat(prefix_width + 1)
             };
             let rail_style = Style::default().fg(palette::TEXT_DIM);
             let mut spans = vec![Span::styled(indent, rail_style)];
@@ -2451,16 +2455,17 @@ fn render_message_with_copy_metadata(
 }
 
 fn history_copy_prefix_width(
-    prefix: &str,
-    prefix_width: usize,
-    is_code: bool,
-    line_index: usize,
+    _prefix: &str,
+    _prefix_width: usize,
+    _is_code: bool,
+    _line_index: usize,
 ) -> usize {
-    if line_index > 0 && is_code && !prefix.is_empty() {
-        prefix_width + 1
-    } else {
-        0
-    }
+    // After phase 3, both code and non-code continuation lines use the same
+    // 2-space indent (no `▏` rail). The transcript cache strips that prefix
+    // via `compute_rail_prefix_width` Pattern C, so we no longer add an extra
+    // copy-prefix width here — doing so would double-strip and lop one
+    // character off each wrapped code line.
+    0
 }
 
 fn hard_break_copy_lines(lines: Vec<Line<'static>>) -> Vec<RenderedTranscriptLine> {
@@ -2605,25 +2610,11 @@ fn render_compact_kv(label: &str, value: &str, style: Style, width: u16) -> Vec<
 /// Wrap rendered tool-card lines with card-rail glyphs (╭ │ ╰).
 /// First non-empty line gets `╭`, middle lines get `│`, last line gets `╰`.
 /// Single-line cards get a single `─` prefix.
-fn wrap_card_rail(mut lines: Vec<Line<'static>>) -> Vec<Line<'static>> {
-    let n = lines.len();
-    if n == 0 {
-        return lines;
-    }
-    if n == 1 {
-        lines[0].spans.insert(0, Span::raw("─ "));
-        return lines;
-    }
-    for (i, line) in lines.iter_mut().enumerate() {
-        let rail = if i == 0 {
-            "\u{256D} " // ╭
-        } else if i == n - 1 {
-            "\u{2570} " // ╰
-        } else {
-            "\u{2502} " // │
-        };
-        line.spans.insert(0, Span::raw(rail));
-    }
+fn wrap_card_rail(lines: Vec<Line<'static>>) -> Vec<Line<'static>> {
+    // Phase 3: drop the `╭ │ ╰` card frame around tool cells. The tool
+    // header glyph + indented body already separates a tool cell from
+    // surrounding prose, and the second rail clashed with the transcript
+    // rail — visible as a doubled pipe on light themes.
     lines
 }
 
@@ -4118,9 +4109,11 @@ mod tests {
             },
         );
 
-        // Index 0 is card-rail glyph (╭); the animated symbol is at index 1.
-        let animated_symbol = animated[0].spans[1].content.trim();
-        let low_motion_symbol = low_motion[0].spans[1].content.trim();
+        // Phase 3: the card-rail glyph (╭) is gone, so the spinner symbol
+        // is now at index 0 (was index 1 when wrap_card_rail prepended a
+        // frame).
+        let animated_symbol = animated[0].spans[0].content.trim();
+        let low_motion_symbol = low_motion[0].spans[0].content.trim();
 
         // low_motion always pins to the first (static) frame.
         assert_eq!(low_motion_symbol, TOOL_RUNNING_SYMBOLS[0]);
@@ -4718,6 +4711,10 @@ mod tests {
         );
 
         // Plain content stays identical so visible output does not move.
+        // Phase 3: the per-row rail glyph "▏ " was replaced with "  " — the
+        // outer tool-card frame is gone, and the body indent is enough on
+        // its own. trim_end() strips trailing spaces from word-wrapping but
+        // keeps the leading two-space rail for the comparison.
         let visible = lines
             .iter()
             .map(|l| {
@@ -4727,9 +4724,9 @@ mod tests {
                     .collect::<String>()
             })
             .collect::<Vec<_>>();
-        assert_eq!(visible[1].trim_end(), "▏ done: scan repo");
-        assert_eq!(visible[2].trim_end(), "▏ live: extract theme");
-        assert_eq!(visible[3].trim_end(), "▏ next: land tests");
+        assert_eq!(visible[1].trim_end(), "  done: scan repo");
+        assert_eq!(visible[2].trim_end(), "  live: extract theme");
+        assert_eq!(visible[3].trim_end(), "  next: land tests");
     }
 
     #[test]
@@ -4749,10 +4746,12 @@ mod tests {
         let lines = cell.lines_with_motion(80, true);
 
         let header = &lines[0];
-        let symbol_span = &header.spans[1];
-        let glyph_span = &header.spans[2];
-        let title_span = &header.spans[3];
-        let state_span = &header.spans[5];
+        // After phase 3 wrap_card_rail is a no-op, so the header starts with
+        // [symbol, glyph, verb, " ", state, …] with no leading rail span.
+        let symbol_span = &header.spans[0];
+        let glyph_span = &header.spans[1];
+        let title_span = &header.spans[2];
+        let state_span = &header.spans[4];
 
         assert_eq!(
             symbol_span.style.fg,
@@ -5185,11 +5184,9 @@ mod tests {
         let live_text =
             lines_text(&cell.lines_with_options(80, TranscriptRenderOptions::default()));
 
-        // Card-rail wrapping: first line starts with ╭, last with ╰.
-        assert!(
-            live_text.starts_with('\u{256D}'),
-            "live view must start with card-rail top glyph ╭: {live_text}"
-        );
+        // Phase 3: card-rail glyphs (╭/│/╰) were removed — the tool header
+        // glyph plus indented body is the only frame now. Just verify the
+        // body reaches both ends of the truncation envelope.
         assert!(live_text.contains("Alt+V for details"));
         assert!(live_text.contains("line 00"));
         assert!(live_text.contains("line 23"));
