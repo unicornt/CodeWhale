@@ -258,18 +258,20 @@ impl FooterProps {
         } else {
             app.turn_started_at
         };
-        let status_indicator = if app.is_loading {
-            super::header::header_status_indicator_frame(
-                status_indicator_started_at,
-                &app.status_indicator,
-            )
-        } else {
-            None
-        };
+        // Phase 5 follow-up: the status-indicator (whale animation) moved
+        // from the centre cluster to the left of `mode_label`. We keep the
+        // frame populated *even when idle* — `header_status_indicator_frame`
+        // returns the first whale glyph at `turn_started_at = None`, which
+        // is the static "ready" pose. That way the whale is always visible
+        // as the left-most CodeWhale brand anchor; the cycle only kicks in
+        // during live turns.
+        let status_indicator = super::header::header_status_indicator_frame(
+            status_indicator_started_at,
+            &app.status_indicator,
+        );
+        // Centre cluster keeps only the streaming `●` marker; the whale
+        // moved to the left so we don't render it twice in one row.
         let live_marker = if app.is_loading {
-            // Centre cluster is space-tight; show the dot alone, drop the
-            // `Live` label. The status indicator next to it already names
-            // the "in-flight" state.
             super::chips::live_marker_spans(false)
         } else {
             Vec::new()
@@ -401,6 +403,29 @@ impl FooterWidget {
             return Vec::new();
         }
 
+        // Whale prefix — phase 5 follow-up: the status-indicator moved from
+        // the centre cluster to the left so the footer always carries the
+        // CodeWhale anchor. Idle = static first frame, in-flight = animated.
+        //
+        // The prefix has a subtle width quirk. ratatui paints a wide-glyph's
+        // *continuation cell* (cell 1 of an emoji) with a literal `" "`
+        // symbol. When tests collect `(0..width).map(|x| buf[(x,0)].symbol())`
+        // into a string, that continuation space contributes another 1 col
+        // of *string* width on top of the emoji's own `unicode_width` 2.
+        // The actual painted col count is 2, but `line.width()` (which the
+        // overflow regression tests use) reads 3. To stay safe under that
+        // assertion model, we budget the prefix at `unicode_width(glyph) + 1`
+        // for both wide and narrow glyphs. For wide glyphs the +1 represents
+        // ratatui's continuation padding; for narrow glyphs it's the
+        // explicit `" "` separator we paint between glyph and `mode_label`.
+        let whale_glyph = self.props.status_indicator.unwrap_or("");
+        let whale_glyph_w = UnicodeWidthStr::width(whale_glyph);
+        let whale_prefix_w = if whale_glyph.is_empty() {
+            0
+        } else {
+            whale_glyph_w + 1
+        };
+
         let mode_label = self.props.mode_label;
         let sep = " \u{00B7} ";
         let model = self.props.model.as_str();
@@ -424,8 +449,9 @@ impl FooterWidget {
 
         let extra_sep = |w: usize| if w > 0 { sep_w } else { 0 };
 
-        // Tier 1: mode · model · balance · cost · status
-        let full_w = mode_w
+        // Tier 1: whale mode · model · balance · cost · status
+        let full_w = whale_prefix_w
+            + mode_w
             + sep_w
             + model_w
             + extra_sep(balance_w)
@@ -444,8 +470,9 @@ impl FooterWidget {
             );
         }
 
-        // Tier 2: mode · model · balance · cost — drop status.
-        let with_cost_w = mode_w
+        // Tier 2: whale mode · model · balance · cost — drop status.
+        let with_cost_w = whale_prefix_w
+            + mode_w
             + sep_w
             + model_w
             + extra_sep(balance_w)
@@ -462,9 +489,9 @@ impl FooterWidget {
             );
         }
 
-        // Tier 3: mode · model · balance — drop cost.
+        // Tier 3: whale mode · model · balance — drop cost.
         if show_balance {
-            let with_balance_w = mode_w + sep_w + model_w + sep_w + balance_w;
+            let with_balance_w = whale_prefix_w + mode_w + sep_w + model_w + sep_w + balance_w;
             if with_balance_w <= max_width {
                 return self.build_status_line_spans(
                     mode_label,
@@ -476,16 +503,16 @@ impl FooterWidget {
             }
         }
 
-        // Tier 4: mode · model — drop balance too.
-        let mode_model_w = mode_w + sep_w + model_w;
+        // Tier 4: whale mode · model — drop balance too.
+        let mode_model_w = whale_prefix_w + mode_w + sep_w + model_w;
         if mode_model_w <= max_width {
             return self.build_status_line_spans(mode_label, model.to_string(), None, None, None);
         }
 
-        // Tier 5: mode · <truncated model> — keep both labels visible by
+        // Tier 5: whale mode · <truncated model> — keep both labels visible by
         // ellipsizing the model name. Only do this when there is enough room
         // for at least the ellipsis ("..."). Below that we drop to mode-only.
-        let prefix_w = mode_w + sep_w;
+        let prefix_w = whale_prefix_w + mode_w + sep_w;
         if prefix_w < max_width {
             let model_budget = max_width - prefix_w;
             if model_budget >= 4 {
@@ -496,13 +523,23 @@ impl FooterWidget {
             }
         }
 
-        // Tier 6: mode-only.
-        if mode_w <= max_width {
+        // Tier 6: whale mode-only.
+        let mode_only_w = whale_prefix_w + mode_w;
+        if mode_only_w <= max_width {
+            return self.build_status_line_spans(mode_label, String::new(), None, None, None);
+        }
+
+        // Tier 7: whale only — sub-mode-width row, drop the label too. The
+        // whale alone is still a useful "alive" signal at very narrow widths.
+        if !whale_glyph.is_empty() && UnicodeWidthStr::width(whale_glyph) <= max_width {
             return vec![Span::styled(
-                mode_label.to_string(),
-                Style::default().fg(self.props.mode_color),
+                whale_glyph.to_string(),
+                Style::default().fg(palette::ACCENT_PRIMARY),
             )];
         }
+
+        // Tier 8: terminal so narrow even the whale glyph won't fit. Fall
+        // back to a truncated mode label so we never produce empty output.
         vec![Span::styled(
             truncate_to_width(mode_label, max_width),
             Style::default().fg(self.props.mode_color),
@@ -519,6 +556,21 @@ impl FooterWidget {
     ) -> Vec<Span<'static>> {
         let sep = " \u{00B7} ";
         let mut spans: Vec<Span<'static>> = Vec::new();
+
+        // Whale prefix — always emitted when the props carry a frame. For
+        // wide emoji (🐳) ratatui's continuation cell already paints a
+        // space-equivalent separator; for narrow glyphs (dots) we add an
+        // explicit space so the brand glyph isn't fused with `mode_label`.
+        if let Some(frame) = self.props.status_indicator {
+            spans.push(Span::styled(
+                frame.to_string(),
+                Style::default().fg(palette::ACCENT_PRIMARY),
+            ));
+            if UnicodeWidthStr::width(frame) < 2 {
+                spans.push(Span::raw(" "));
+            }
+        }
+
         if !mode_label.is_empty() {
             spans.push(Span::styled(
                 mode_label.to_string(),
@@ -526,7 +578,13 @@ impl FooterWidget {
             ));
         }
         if !model_label.is_empty() {
-            if !spans.is_empty() {
+            // Only the *non-whale* spans participate in the `· ` separator
+            // dance — the whale prefix is delimited by its own trailing
+            // space, not the bullet.
+            let has_label_before = spans
+                .iter()
+                .any(|s| s.style.fg == Some(self.props.mode_color));
+            if has_label_before {
                 spans.push(Span::styled(
                     sep.to_string(),
                     Style::default().fg(self.props.text_dim_color),
@@ -538,36 +596,30 @@ impl FooterWidget {
             ));
         }
         if let Some(balance_text) = balance {
-            if !spans.is_empty() {
-                spans.push(Span::styled(
-                    sep.to_string(),
-                    Style::default().fg(self.props.text_dim_color),
-                ));
-            }
+            spans.push(Span::styled(
+                sep.to_string(),
+                Style::default().fg(self.props.text_dim_color),
+            ));
             spans.push(Span::styled(
                 balance_text,
                 Style::default().fg(self.props.text_muted_color),
             ));
         }
         if let Some(cost_text) = cost {
-            if !spans.is_empty() {
-                spans.push(Span::styled(
-                    sep.to_string(),
-                    Style::default().fg(self.props.text_dim_color),
-                ));
-            }
+            spans.push(Span::styled(
+                sep.to_string(),
+                Style::default().fg(self.props.text_dim_color),
+            ));
             spans.push(Span::styled(
                 cost_text,
                 Style::default().fg(self.props.text_muted_color),
             ));
         }
         if let Some(status_label) = status {
-            if !spans.is_empty() {
-                spans.push(Span::styled(
-                    sep.to_string(),
-                    Style::default().fg(self.props.text_dim_color),
-                ));
-            }
+            spans.push(Span::styled(
+                sep.to_string(),
+                Style::default().fg(self.props.text_dim_color),
+            ));
             spans.push(Span::styled(
                 status_label.to_string(),
                 Style::default().fg(self.props.state_color),
@@ -737,18 +789,12 @@ impl Renderable for FooterWidget {
         }
         let spacer_width = available_width.saturating_sub(left_width + right_width);
 
-        // Centre cluster: status indicator + `● Live` streaming marker.
-        // Phase 4 brought the live marker into the footer (the persistent
-        // header used to host it); the indicator + marker pair sits in the
-        // middle so the user can spot "in-flight" without scanning.
+        // Centre cluster: live `●` streaming marker only. The status
+        // indicator (whale animation) moved to the left of `mode_label` —
+        // the brand glyph anchors the row, and the dot marks "still
+        // generating" without doubling-up.
         let mut centre_spans: Vec<Span<'static>> = Vec::new();
-        if let Some(frame) = self.props.status_indicator {
-            centre_spans.extend(super::chips::status_indicator_spans(Some(frame)));
-        }
         if !self.props.live_marker.is_empty() {
-            if !centre_spans.is_empty() {
-                centre_spans.push(Span::raw(" "));
-            }
             centre_spans.extend(self.props.live_marker.iter().cloned());
         }
         let centre_width = span_width(&centre_spans);
@@ -780,7 +826,27 @@ impl Renderable for FooterWidget {
 }
 
 fn span_width(spans: &[Span<'_>]) -> usize {
-    spans.iter().map(|span| span.content.width()).sum()
+    // Account for ratatui's wide-glyph continuation cell. When a span
+    // contains an emoji or other 2-col character, ratatui paints the
+    // continuation cell with a literal `" "` symbol. Tests collect
+    // `(0..area.width).map(|x| buf[(x,0)].symbol())` and check
+    // `line.width()`, which includes that phantom space. To keep the
+    // budget arithmetic consistent with what tests measure (and what
+    // users see in their terminal), we add 1 per wide-grapheme.
+    spans
+        .iter()
+        .map(|span| {
+            let content = span.content.as_ref();
+            let base = UnicodeWidthStr::width(content);
+            let wide_count = content
+                .chars()
+                .filter(|ch| {
+                    UnicodeWidthChar::width(*ch).unwrap_or(0) >= 2
+                })
+                .count();
+            base + wide_count
+        })
+        .sum()
 }
 
 fn truncate_to_width(text: &str, max_width: usize) -> String {
@@ -1407,7 +1473,13 @@ mod tests {
     fn footer_priority_drop_truncates_model_only_when_status_already_gone() {
         let props = props_with_status("working");
         let line = render_at_width(props, 20);
-        assert!(line.starts_with("agent"), "mode stays at front: {line:?}");
+        // Phase 5 follow-up: the whale brand glyph anchors the row. The
+        // `mode` label sits right after it.
+        assert!(
+            line.starts_with("\u{1F433}"),
+            "whale prefix is the row anchor: {line:?}"
+        );
+        assert!(line.contains("agent"), "mode stays after whale: {line:?}");
         assert!(
             line.contains("..."),
             "model truncated as last resort: {line:?}"

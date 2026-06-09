@@ -2010,7 +2010,7 @@ fn build_empty_state_lines(app: &App, area: Rect) -> Vec<Line<'static>> {
         Line::from(vec![
             Span::raw(inset.clone()),
             Span::styled(
-                "\u{1F40B} ",
+                "\u{1F433} ",
                 Style::default().fg(palette::ACCENT_PRIMARY).bold(),
             ),
             Span::styled(
@@ -3457,7 +3457,7 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
 
-        assert!(rendered.contains("\u{1F40B} Welcome to CodeWhale"));
+        assert!(rendered.contains("\u{1F433} Welcome to CodeWhale"));
         assert!(rendered.contains("model: deepseek-v4-pro"));
         assert!(rendered.contains("cwd: /tmp/codewhale-test-workspace"));
         assert!(rendered.contains(&format!("v{}", env!("CARGO_PKG_VERSION"))));
