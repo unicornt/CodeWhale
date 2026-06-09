@@ -2236,25 +2236,74 @@ fn render_thinking(
     let rail_style = Style::default().fg(thinking_state_accent(state));
     let cursor_style = Style::default().fg(palette::ACCENT_REASONING_LIVE);
 
+    // Apply the reasoning tint at the *Line* level AND pad each row out to
+    // `width` with a trailing tinted space — without explicit padding, the
+    // bg only covers the rendered spans and any gap between markdown spans
+    // shows the surface bg, which on light themes reads as a striped
+    // highlight.
+    let line_bg_style = match body_bg {
+        Some(bg) => Style::default().bg(bg),
+        None => Style::default(),
+    };
+    let pad_to_width = |mut spans: Vec<Span<'static>>, total_width: u16| -> Line<'static> {
+        if let Some(bg) = body_bg {
+            let used: u16 = spans
+                .iter()
+                .map(|s| {
+                    UnicodeWidthStr::width(s.content.as_ref())
+                        .min(u16::MAX as usize) as u16
+                })
+                .sum();
+            let pad = total_width.saturating_sub(used);
+            if pad > 0 {
+                spans.push(Span::styled(
+                    " ".repeat(pad as usize),
+                    Style::default().bg(bg),
+                ));
+            }
+        }
+        Line::from(spans).style(line_bg_style)
+    };
+
     if rendered.is_empty() && streaming {
         let mut spans = vec![Span::styled(REASONING_RAIL.to_string(), rail_style)];
         spans.push(Span::styled("thinking...", body_style.italic()));
-        if !low_motion {
-            spans.push(Span::styled(format!(" {REASONING_CURSOR}"), cursor_style));
+        let cursor_span = if low_motion {
+            None
+        } else {
+            Some(Span::styled(format!(" {REASONING_CURSOR}"), cursor_style))
+        };
+        let used_extra = cursor_span
+            .as_ref()
+            .map(|s| UnicodeWidthStr::width(s.content.as_ref()) as u16)
+            .unwrap_or(0);
+        let padded = pad_to_width(spans, width.saturating_sub(used_extra));
+        let mut final_spans = padded.spans;
+        if let Some(cs) = cursor_span {
+            final_spans.push(cs);
         }
-        lines.push(Line::from(spans));
+        lines.push(Line::from(final_spans).style(line_bg_style));
     }
 
     let last_idx = rendered.len().saturating_sub(1);
     for (idx, line) in rendered.into_iter().enumerate() {
         let mut spans = vec![Span::styled(REASONING_RAIL.to_string(), rail_style)];
         spans.extend(line.spans);
-        // Trailing cursor on the very last body line while streaming —
-        // signals "still generating" without churning every line.
-        if streaming && !low_motion && idx == last_idx {
-            spans.push(Span::styled(format!(" {REASONING_CURSOR}"), cursor_style));
+        let cursor_span = if streaming && !low_motion && idx == last_idx {
+            Some(Span::styled(format!(" {REASONING_CURSOR}"), cursor_style))
+        } else {
+            None
+        };
+        let used_extra = cursor_span
+            .as_ref()
+            .map(|s| UnicodeWidthStr::width(s.content.as_ref()) as u16)
+            .unwrap_or(0);
+        let padded = pad_to_width(spans, width.saturating_sub(used_extra));
+        let mut final_spans = padded.spans;
+        if let Some(cs) = cursor_span {
+            final_spans.push(cs);
         }
-        lines.push(Line::from(spans));
+        lines.push(Line::from(final_spans).style(line_bg_style));
     }
 
     let needs_affordance = collapsed

@@ -1141,6 +1141,60 @@ pub const CLAUDE_UI_THEME: UiTheme = UiTheme {
     tool_failed: Color::Rgb(0xc6, 0x45, 0x45),
 };
 
+pub const CLAUDE_LIGHT_UI_THEME: UiTheme = UiTheme {
+    name: "claude-light",
+    mode: PaletteMode::Light,
+    // Anthropic brand surfaces — Soft Cloud cream paper
+    surface_bg: Color::Rgb(0xfa, 0xf9, 0xf5), // Soft Cloud
+    panel_bg: Color::Rgb(0xf0, 0xed, 0xe5),   // sidebar / dialog cream
+    elevated_bg: Color::Rgb(0xe8, 0xe4, 0xd9), // code-block cream
+    composer_bg: Color::Rgb(0xfa, 0xf9, 0xf5),
+    selection_bg: Color::Rgb(0xe2, 0xd9, 0xc8), // warm tan selection
+    header_bg: Color::Rgb(0xfa, 0xf9, 0xf5),
+    footer_bg: Color::Rgb(0xfa, 0xf9, 0xf5),
+    // Anthropic Slate text hierarchy on cream
+    text_dim: Color::Rgb(0xa0, 0x96, 0x86),
+    text_hint: Color::Rgb(0x82, 0x77, 0x66),
+    text_muted: Color::Rgb(0x4a, 0x44, 0x3a),
+    text_body: Color::Rgb(0x19, 0x19, 0x19), // Slate
+    text_soft: Color::Rgb(0x33, 0x2e, 0x26),
+    border: Color::Rgb(0xd6, 0xcd, 0xbd),
+    // Book Cloth coral primary, muted teal secondary (no blue — Claude
+    // Code light uses warm earth tones across accent roles).
+    accent_primary: Color::Rgb(0xcc, 0x78, 0x5c), // Book Cloth
+    accent_secondary: Color::Rgb(0x6f, 0x9b, 0x8e), // muted teal
+    accent_action: Color::Rgb(0xd9, 0x96, 0x4a),  // amber
+    // Error / destructive
+    error_fg: Color::Rgb(0xb8, 0x3a, 0x3a),
+    error_hover: Color::Rgb(0xc4, 0x55, 0x55),
+    error_surface: Color::Rgb(0xfa, 0xe5, 0xe5),
+    error_border: Color::Rgb(0xb8, 0x3a, 0x3a),
+    error_text: Color::Rgb(0x6b, 0x1c, 0x1c),
+    // Status — info reuses accent_primary so DEEPSEEK_SKY-style sidebar
+    // labels (workspace name, "live" markers) render coral instead of blue.
+    warning: Color::Rgb(0xb0, 0x7a, 0x10),
+    success: Color::Rgb(0x3e, 0x8e, 0x4f),
+    info: Color::Rgb(0xcc, 0x78, 0x5c),
+    // Mode badges
+    mode_agent: Color::Rgb(0xcc, 0x78, 0x5c),
+    mode_yolo: Color::Rgb(0xb8, 0x3a, 0x3a),
+    mode_plan: Color::Rgb(0xd9, 0x96, 0x4a),
+    mode_goal: Color::Rgb(0x3e, 0x8e, 0x4f),
+    // Footer statusline — "working" is muted teal, not blue.
+    status_ready: Color::Rgb(0x82, 0x77, 0x66),
+    status_working: Color::Rgb(0x6f, 0x9b, 0x8e),
+    status_warning: Color::Rgb(0xb0, 0x7a, 0x10),
+    // Diff
+    diff_added_fg: Color::Rgb(0x3e, 0x8e, 0x4f),
+    diff_deleted_fg: Color::Rgb(0xb8, 0x3a, 0x3a),
+    diff_added_bg: Color::Rgb(0xdf, 0xee, 0xd8),
+    diff_deleted_bg: Color::Rgb(0xfa, 0xe0, 0xe0),
+    // Tool cells
+    tool_running: Color::Rgb(0x6f, 0x9b, 0x8e),
+    tool_success: Color::Rgb(0x82, 0x77, 0x66),
+    tool_failed: Color::Rgb(0xb8, 0x3a, 0x3a),
+};
+
 pub const MATRIX_UI_THEME: UiTheme = UiTheme {
     name: "matrix",
     mode: PaletteMode::Dark,
@@ -1259,6 +1313,7 @@ pub enum ThemeId {
     Dracula,
     GruvboxDark,
     Claude,
+    ClaudeLight,
     Matrix,
     SolarizedLight,
 }
@@ -1280,6 +1335,7 @@ impl ThemeId {
             "dracula" => Some(Self::Dracula),
             "gruvbox-dark" => Some(Self::GruvboxDark),
             "claude" => Some(Self::Claude),
+            "claude-light" => Some(Self::ClaudeLight),
             "matrix" => Some(Self::Matrix),
             "solarized-light" => Some(Self::SolarizedLight),
             _ => None,
@@ -1301,6 +1357,7 @@ impl ThemeId {
             Self::Dracula => "dracula",
             Self::GruvboxDark => "gruvbox-dark",
             Self::Claude => "claude",
+            Self::ClaudeLight => "claude-light",
             Self::Matrix => "matrix",
             Self::SolarizedLight => "solarized-light",
         }
@@ -1320,6 +1377,7 @@ impl ThemeId {
             Self::Dracula => "Dracula",
             Self::GruvboxDark => "Gruvbox Dark",
             Self::Claude => "Claude",
+            Self::ClaudeLight => "Claude Light",
             Self::Matrix => "Matrix",
             Self::SolarizedLight => "Solarized Light",
         }
@@ -1339,6 +1397,7 @@ impl ThemeId {
             Self::Dracula => "Classic high-contrast purple",
             Self::GruvboxDark => "Vintage warm earth tones",
             Self::Claude => "Warm navy & coral",
+            Self::ClaudeLight => "Cream paper & coral — Claude.ai light",
             Self::Matrix => "The Matrix films inspired theme",
             Self::SolarizedLight => {
                 "Solarized light — Light, calming palette on warm ivory — easy on the eyes"
@@ -1363,6 +1422,7 @@ impl ThemeId {
             Self::Dracula => DRACULA_UI_THEME,
             Self::GruvboxDark => GRUVBOX_DARK_UI_THEME,
             Self::Claude => CLAUDE_UI_THEME,
+            Self::ClaudeLight => CLAUDE_LIGHT_UI_THEME,
             Self::Matrix => MATRIX_UI_THEME,
             Self::SolarizedLight => SOLARIZED_LIGHT_UI_THEME,
         }
@@ -1381,6 +1441,7 @@ pub const SELECTABLE_THEMES: &[ThemeId] = &[
     ThemeId::Dracula,
     ThemeId::GruvboxDark,
     ThemeId::Claude,
+    ThemeId::ClaudeLight,
     ThemeId::Matrix,
     ThemeId::SolarizedLight,
 ];
@@ -1429,6 +1490,7 @@ pub fn normalize_theme_name(value: &str) -> Option<&'static str> {
         "dracula" => Some("dracula"),
         "gruvbox-dark" | "gruvbox" => Some("gruvbox-dark"),
         "claude" => Some("claude"),
+        "claude-light" | "claudelight" | "claude_light" => Some("claude-light"),
         "matrix" | "hacker" => Some("matrix"),
         "solarized-light" | "solarized" => Some("solarized-light"),
         _ => None,
@@ -1662,6 +1724,7 @@ pub const fn theme_remap_active(theme: ThemeId) -> bool {
             | ThemeId::Dracula
             | ThemeId::GruvboxDark
             | ThemeId::Claude
+            | ThemeId::ClaudeLight
             | ThemeId::Matrix
             | ThemeId::SolarizedLight
     )
@@ -1684,15 +1747,15 @@ pub fn adapt_fg_for_theme(color: Color, theme: ThemeId, ui: &UiTheme) -> Color {
         return color;
     }
 
-    if color == TEXT_BODY || color == SELECTION_TEXT || color == Color::White {
+    if color == TEXT_BODY || color == SELECTION_TEXT || color == Color::White || color == LIGHT_TEXT_BODY {
         ui.text_body
-    } else if color == TEXT_SECONDARY || color == TEXT_MUTED {
+    } else if color == TEXT_SECONDARY || color == TEXT_MUTED || color == LIGHT_TEXT_MUTED {
         ui.text_muted
-    } else if color == TEXT_HINT || color == TEXT_DIM {
+    } else if color == TEXT_HINT || color == TEXT_DIM || color == LIGHT_TEXT_HINT {
         ui.text_hint
-    } else if color == TEXT_SOFT || color == TEXT_TOOL_OUTPUT {
+    } else if color == TEXT_SOFT || color == TEXT_TOOL_OUTPUT || color == LIGHT_TEXT_SOFT {
         ui.text_soft
-    } else if color == BORDER_COLOR {
+    } else if color == BORDER_COLOR || color == LIGHT_BORDER {
         ui.border
     } else if color == TEXT_ACCENT || color == DEEPSEEK_SKY || color == ACCENT_TOOL_LIVE {
         ui.status_working
@@ -1708,7 +1771,7 @@ pub fn adapt_fg_for_theme(color: Color, theme: ThemeId, ui: &UiTheme) -> Color {
         ui.warning
     } else if color == STATUS_ERROR || color == DEEPSEEK_RED {
         ui.error_fg
-    } else if color == DIFF_ADDED || color == USER_BODY {
+    } else if color == DIFF_ADDED || color == USER_BODY || color == LIGHT_USER_BODY {
         theme_green(ui)
     } else if color == DEEPSEEK_BLUE {
         ui.mode_agent
@@ -1725,26 +1788,31 @@ pub fn adapt_bg_for_theme(color: Color, theme: ThemeId, ui: &UiTheme) -> Color {
         return color;
     }
 
-    if color == DEEPSEEK_INK || color == BACKGROUND_DARK {
+    if color == DEEPSEEK_INK || color == BACKGROUND_DARK || color == LIGHT_SURFACE {
         ui.surface_bg
     } else if color == DEEPSEEK_SLATE
         || color == COMPOSER_BG
         || color == SURFACE_PANEL
         || color == SURFACE_TOOL
+        || color == LIGHT_PANEL
     {
         ui.panel_bg
-    } else if color == SURFACE_ELEVATED || color == SURFACE_TOOL_ACTIVE {
+    } else if color == SURFACE_ELEVATED
+        || color == SURFACE_TOOL_ACTIVE
+        || color == LIGHT_ELEVATED
+    {
         ui.elevated_bg
     } else if color == SURFACE_REASONING
         || color == SURFACE_REASONING_TINT
         || color == SURFACE_REASONING_ACTIVE
+        || color == LIGHT_REASONING
     {
         ui.panel_bg
-    } else if color == SURFACE_SUCCESS {
+    } else if color == SURFACE_SUCCESS || color == LIGHT_SUCCESS {
         ui.diff_added_bg
-    } else if color == SURFACE_ERROR {
+    } else if color == SURFACE_ERROR || color == LIGHT_ERROR {
         ui.error_surface
-    } else if color == SELECTION_BG {
+    } else if color == SELECTION_BG || color == LIGHT_SELECTION_BG {
         ui.selection_bg
     } else if color == DIFF_ADDED_BG {
         theme_diff_added_bg(ui)

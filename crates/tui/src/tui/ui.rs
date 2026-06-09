@@ -6819,14 +6819,8 @@ fn render(f: &mut Frame, app: &mut App) {
     app.viewport.last_composer_area = Some(body_chunks[2]);
     {
         let area = body_chunks[2];
-        let has_panel = app.composer_border && area.height >= 3 && area.width >= 12;
-        let inner = if has_panel {
-            ratatui::widgets::Block::default()
-                .borders(ratatui::widgets::Borders::ALL)
-                .inner(area)
-        } else {
-            area
-        };
+        let has_panel = crate::tui::widgets::composer_has_panel(area, app.composer_border);
+        let inner = crate::tui::widgets::composer_inner_area(area, has_panel);
         app.viewport.last_composer_content = Some(inner);
 
         // Compute scroll offset and top padding for mouse coordinate mapping.

@@ -51,6 +51,11 @@ use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 const SEND_FLASH_DURATION: Duration = Duration::from_millis(500);
 const COMPOSER_PANEL_HEIGHT: u16 = 2;
+/// Visual width reserved for the leading `> ` prompt prefix that mirrors
+/// Claude Code's composer style. Cursor, wrap, and mouse hit-tests all
+/// treat the prefix as decorative — content reasoning happens in the
+/// post-prefix coordinate space.
+pub const COMPOSER_PROMPT_PREFIX_WIDTH: u16 = 2;
 const JUMP_TO_LATEST_BUTTON_WIDTH: u16 = 3;
 const JUMP_TO_LATEST_BUTTON_HEIGHT: u16 = 3;
 
@@ -430,6 +435,30 @@ fn render_jump_to_latest_button(
         .set_style(Style::default().fg(arrow).add_modifier(Modifier::BOLD));
 }
 
+/// Resolve the composer's content rect for a given outer area.
+///
+/// When `has_panel` is true the area is shrunk by the top/bottom dividers
+/// (Claude Code-style chrome — no vertical sides) and then the leading
+/// `> ` prompt prefix. ui.rs and the widget itself share this single
+/// function so cursor / mouse / wrap stay in lock-step.
+pub fn composer_inner_area(area: Rect, has_panel: bool) -> Rect {
+    if !has_panel {
+        return area;
+    }
+    let mut inner = Block::default()
+        .borders(Borders::TOP | Borders::BOTTOM)
+        .inner(area);
+    let prefix = COMPOSER_PROMPT_PREFIX_WIDTH;
+    inner.x = inner.x.saturating_add(prefix);
+    inner.width = inner.width.saturating_sub(prefix);
+    inner
+}
+
+/// True when an area is wide / tall enough for the bordered composer panel.
+pub fn composer_has_panel(area: Rect, composer_border: bool) -> bool {
+    composer_border && area.height >= 3 && area.width >= 12
+}
+
 pub struct ComposerWidget<'a> {
     app: &'a App,
     max_height: u16,
@@ -497,11 +526,7 @@ impl<'a> ComposerWidget<'a> {
     }
 
     fn inner_area(&self, area: Rect) -> Rect {
-        if self.has_panel(area) {
-            Block::default().borders(Borders::ALL).inner(area)
-        } else {
-            area
-        }
+        composer_inner_area(area, self.has_panel(area))
     }
 
     fn mode_color(&self) -> Color {
@@ -541,7 +566,6 @@ impl Renderable for ComposerWidget<'_> {
         let content_width = usize::from(inner_area.width.max(1));
         let (visible_lines, _cursor_row, _cursor_col, scroll_offset) =
             layout_input_with_scroll(input_text, input_cursor, content_width, input_rows_budget);
-        let is_draft_mode = input_text.contains('\n') || visible_lines.len() > 1;
         if has_panel {
             let border_color = if input_text.trim().is_empty() {
                 palette::BORDER_COLOR
@@ -625,33 +649,30 @@ impl Renderable for ComposerWidget<'_> {
                     )])
                 })
             } else {
-                Some(Line::from(vec![
-                    Span::styled(" ? shortcuts", Style::default().fg(palette::TEXT_HINT)),
-                    Span::styled(" · ", Style::default().fg(palette::TEXT_HINT)),
-                    Span::styled("↵ send", Style::default().fg(palette::TEXT_HINT)),
-                    Span::styled(" · ", Style::default().fg(palette::TEXT_HINT)),
-                    Span::styled("esc clear ", Style::default().fg(palette::TEXT_HINT)),
-                ]))
+                None
             };
 
             let mut block = Block::default()
-                .title(Line::from(Span::styled(
-                    if self.app.is_history_search_active() {
-                        self.app
-                            .tr(crate::localization::MessageId::HistorySearchTitle)
-                    } else if is_draft_mode {
-                        "Draft"
-                    } else {
-                        "Composer"
-                    },
-                    Style::default().fg(palette::TEXT_MUTED),
-                )))
-                .borders(Borders::ALL)
+                .borders(Borders::TOP | Borders::BOTTOM)
                 .border_style(Style::default().fg(border_color))
                 .style(background);
+            // History-search keeps a left title because there is no other
+            // affordance telling the user the composer is in search mode;
+            // the regular Composer / Draft titles are dropped to mirror
+            // Claude Code's chrome-light layout.
+            if self.app.is_history_search_active() {
+                block = block.title(Line::from(Span::styled(
+                    self.app
+                        .tr(crate::localization::MessageId::HistorySearchTitle),
+                    Style::default().fg(palette::TEXT_MUTED),
+                )));
+            }
             // Top-right corner: editor state plus transient turn receipts.
             // Receipts are lifecycle chrome, not transcript content; they
             // should appear briefly without displacing conversation rows.
+            // Phase 3 will move receipts/vim/session-title into the footer's
+            // right cluster; until then we keep them in the same slot so no
+            // CodeWhale-specific chrome is dropped during the migration.
             if let Some(chrome) = composer_top_right_chrome(self.app, area.width) {
                 block = block.title_top(chrome.right_aligned());
             }
@@ -674,7 +695,7 @@ impl Renderable for ComposerWidget<'_> {
             };
             input_lines.push(Line::from(Span::styled(
                 placeholder,
-                Style::default().fg(palette::TEXT_MUTED).italic(),
+                Style::default().fg(palette::TEXT_HINT).italic(),
             )));
         } else if let Some((sel_start, sel_end)) = self.app.selection_range() {
             let line_ranges: Vec<(usize, usize)> =
@@ -989,6 +1010,31 @@ impl Renderable for ComposerWidget<'_> {
             .style(background)
             .wrap(Wrap { trim: false });
         paragraph.render(inner_area, buf);
+
+        // Decorative `> ` prompt prefix mirroring Claude Code's composer.
+        // Painted after the paragraph so it never gets clipped by background
+        // fill, and only on rows that actually carry input/placeholder text.
+        if has_panel {
+            let prefix_x = inner_area.x.saturating_sub(COMPOSER_PROMPT_PREFIX_WIDTH);
+            let first_row = inner_area.y.saturating_add(top_padding as u16);
+            let row_count =
+                (visual_rows as u16).min(inner_area.height.saturating_sub(top_padding as u16));
+            let prefix_style = Style::default()
+                .fg(palette::TEXT_HINT)
+                .bg(self.app.ui_theme.composer_bg);
+            for offset in 0..row_count {
+                let cell_y = first_row.saturating_add(offset);
+                if cell_y >= inner_area.y.saturating_add(inner_area.height) {
+                    break;
+                }
+                buf[(prefix_x, cell_y)]
+                    .set_symbol(">")
+                    .set_style(prefix_style);
+                buf[(prefix_x.saturating_add(1), cell_y)]
+                    .set_symbol(" ")
+                    .set_style(prefix_style);
+            }
+        }
     }
 
     fn desired_height(&self, width: u16) -> u16 {
@@ -2066,6 +2112,7 @@ fn placeholder_visual_lines_for(placeholder: &str, content_width: usize) -> usiz
     wrap_text(placeholder, content_width).len().max(1)
 }
 
+#[cfg(test)]
 fn composer_min_input_rows(density: ComposerDensity) -> usize {
     match density {
         ComposerDensity::Compact => 2,
@@ -2097,7 +2144,12 @@ fn composer_height(
         0
     };
     let content_width = if has_panel {
-        usize::from(width.saturating_sub(2).max(1))
+        usize::from(
+            width
+                .saturating_sub(2)
+                .saturating_sub(COMPOSER_PROMPT_PREFIX_WIDTH)
+                .max(1),
+        )
     } else {
         usize::from(width.max(1))
     };
@@ -2105,9 +2157,9 @@ fn composer_height(
     if line_count == 0 {
         line_count = 1;
     }
-    if has_panel {
-        line_count = line_count.max(composer_min_input_rows(density));
-    }
+    // Composer height grows one row per wrapped input line — Claude Code
+    // mirrors this. Density no longer floors the input rows; it still
+    // caps the panel via `composer_max_height`.
     line_count = line_count
         .saturating_add(extra_lines)
         .saturating_add(chrome_height);
@@ -3159,8 +3211,11 @@ mod tests {
 
     #[test]
     fn composer_height_prefers_panel_shape_when_space_allows() {
+        // Empty composer collapses to a single input row plus 2 chrome rows
+        // (top/bottom border) so the panel doesn't dominate the chat area
+        // before there is anything to type into.
         let height = composer_height("", 40, 8, 0, ComposerDensity::Comfortable, true);
-        assert_eq!(height, 5);
+        assert_eq!(height, 3);
     }
 
     #[test]
@@ -3168,7 +3223,7 @@ mod tests {
         let with_border = composer_height("", 40, 8, 0, ComposerDensity::Comfortable, true);
         let without_border = composer_height("", 40, 8, 0, ComposerDensity::Comfortable, false);
 
-        assert_eq!(with_border, 5);
+        assert_eq!(with_border, 3);
         assert_eq!(without_border, 1);
         assert!(without_border < with_border);
     }
@@ -3200,13 +3255,13 @@ mod tests {
             height: 5,
         };
 
-        // inner_area: {x:1, y:1, w:38, h:3}  (borders shrink by 1 each side)
+        // inner_area: {x:2, y:1, w:38, h:3}  (top/bottom dividers shrink by 1, prefix shrinks left by 2)
         // input_rows_budget = 3
         // placeholder_visual_lines(38) = 1  (placeholder is 22 chars, fits in 38)
         // top_padding = 3 - clamp(1, 1, 3) = 2
-        // cursor_x = 0 + (1-0) + 0 = 1
+        // cursor_x = 0 + (2-0) + 0 = 2
         // cursor_y = 0 + (1-0) + (2+0) = 3
-        assert_eq!(widget.cursor_pos(area), Some((1, 3)));
+        assert_eq!(widget.cursor_pos(area), Some((2, 3)));
     }
 
     #[test]
@@ -3226,14 +3281,14 @@ mod tests {
             height: 5,
         };
 
-        // inner_area: {x:1, y:1, w:12, h:3}
+        // inner_area: {x:2, y:1, w:12, h:3}  (top/bottom dividers + prefix 2)
         // input_rows_budget = 3
         // placeholder_visual_lines(12) = 2  ("Try \"fix ...\"" / "or /help")
         // top_padding = 3 - clamp(2, 1, 3) = 1
-        // cursor_x = 0 + (1-0) + 0 = 1
+        // cursor_x = 0 + (2-0) + 0 = 2
         // cursor_y = 0 + (1-0) + (1+0) = 2
         assert_eq!(placeholder_visual_lines(12), 2);
-        assert_eq!(widget.cursor_pos(area), Some((1, 2)));
+        assert_eq!(widget.cursor_pos(area), Some((2, 2)));
     }
 
     #[test]
@@ -3255,7 +3310,6 @@ mod tests {
         widget.render(area, &mut buf);
         let rendered = buffer_text(&buf, area);
 
-        assert!(rendered.contains("Composer"));
         assert!(rendered.contains("my-session"));
     }
 
@@ -3278,7 +3332,6 @@ mod tests {
         widget.render(area, &mut buf);
         let rendered = buffer_text(&buf, area);
 
-        assert!(rendered.contains("Composer"));
         assert!(rendered.contains("turn completed"));
         assert!(rendered.contains("tool(s) used"));
     }
