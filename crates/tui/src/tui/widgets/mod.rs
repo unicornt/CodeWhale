@@ -17,9 +17,16 @@ mod renderable;
 pub mod tool_card;
 
 pub use footer::{
-    FooterProps, FooterToast, FooterWidget, footer_agents_chip, footer_shell_chip,
-    footer_working_label,
+    FooterProps, FooterToast, FooterWidget, footer_shell_chip, footer_working_label,
 };
+// `footer_agents_chip` is no longer rendered (sidebar tasks panel takes
+// over). The function lives on for the regression tests in
+// `footer.rs::tests` and the test-only parity helper
+// `footer_auxiliary_spans` in `footer_ui.rs`. Re-export it crate-private
+// so those test paths can still reach it without making the chip a public
+// surface.
+#[cfg(test)]
+pub(crate) use footer::footer_agents_chip;
 // `HeaderData` / `HeaderWidget` are no longer wired into the live render
 // path after phase 4 (footer absorbed all header chips). They stay compiled
 // inside `header.rs` for a future `/status` / onboarding embed, but we no

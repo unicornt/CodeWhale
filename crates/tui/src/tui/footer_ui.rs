@@ -437,11 +437,12 @@ pub(crate) fn render_footer_from(
     } else {
         Vec::new()
     };
-    let agents = if has(S::Agents) {
-        crate::tui::widgets::footer_agents_chip(running_agent_count(app), app.ui_locale)
-    } else {
-        Vec::new()
-    };
+    // `S::Agents` would normally surface a `0 active · 19 done` chip, but
+    // the sidebar's tasks panel already shows active agents and the recent-
+    // tools panel shows completed tool calls. Keep the chip dark in the
+    // footer to avoid duplication.
+    let agents: Vec<Span<'static>> = Vec::new();
+    let _ = has(S::Agents); // explicit acknowledgement that the toggle is consumed-but-ignored
     let reasoning_replay = if has(S::ReasoningReplay) {
         footer_reasoning_replay_spans(app)
     } else {
@@ -458,11 +459,13 @@ pub(crate) fn render_footer_from(
     } else {
         Vec::new()
     };
-    let cost = if has(S::Cost) {
-        footer_cost_spans(app)
-    } else {
-        Vec::new()
-    };
+    // `S::Cost` is dropped from the footer — the sidebar's Context panel
+    // already shows `cost: ¥0.13 (session ¥0.13 + agents <¥0.0001)` with
+    // the same tokens / cost breakdown. We keep the toggle alive in the
+    // settings list so user configs don't churn, but the footer slot is
+    // empty regardless of the flag.
+    let cost: Vec<Span<'static>> = Vec::new();
+    let _ = has(S::Cost);
     let balance = if has(S::Balance) {
         footer_balance_spans(app)
     } else {
@@ -573,6 +576,10 @@ pub(crate) fn footer_context_percent_spans(app: &App) -> Vec<Span<'static>> {
     )]
 }
 
+// Sidebar Context panel now carries `cost: …` so the footer no longer
+// renders a cost chip. The span builder is kept compiled in case a future
+// surface (e.g. /status) wants to reuse the formatter.
+#[allow(dead_code)]
 pub(crate) fn footer_cost_spans(app: &App) -> Vec<Span<'static>> {
     let displayed_cost = app.displayed_session_cost_for_currency(app.cost_currency);
     if !should_show_footer_cost(displayed_cost) {
@@ -626,6 +633,7 @@ pub(crate) fn footer_balance_spans(app: &App) -> Vec<Span<'static>> {
     )]
 }
 
+#[allow(dead_code)]
 pub(crate) fn should_show_footer_cost(displayed_cost: f64) -> bool {
     displayed_cost.is_finite() && displayed_cost > 0.0
 }

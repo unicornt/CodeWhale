@@ -7200,9 +7200,17 @@ fn render_footer_from_with_default_items_renders_mode_and_model() {
     let props = render_footer_from(&app, &items, None);
     assert_eq!(props.mode_label, "agent");
     assert!(!props.model.is_empty(), "footer should show a model name");
-    // Tiny but real costs should render instead of disappearing as "$0.00".
-    assert!(!props.cost.is_empty());
-    assert_eq!(spans_text(&props.cost), "<$0.0001");
+    // Cost / agents chips moved to the sidebar Context panel, so the
+    // footer-side props leave them empty regardless of the user's
+    // status_items toggles.
+    assert!(
+        props.cost.is_empty(),
+        "cost chip should be empty in footer (sidebar takes over)"
+    );
+    assert!(
+        props.agents.is_empty(),
+        "agents chip should be empty in footer (sidebar takes over)"
+    );
 }
 
 #[test]

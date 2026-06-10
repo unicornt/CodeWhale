@@ -138,6 +138,9 @@ pub fn footer_shell_chip(active: bool) -> Vec<Span<'static>> {
 /// the locale registry so CJK locales can render the count without the
 /// English plural-`s` artefact.
 #[must_use]
+#[allow(dead_code)] // sidebar tasks panel now shows active agents; footer
+                    // chip dropped, but the function stays compiled because
+                    // a handful of regression tests still call it directly.
 pub fn footer_agents_chip(running: usize, locale: Locale) -> Vec<Span<'static>> {
     if running == 0 {
         return Vec::new();
@@ -247,12 +250,13 @@ impl FooterProps {
         // Pull the chips that the legacy `HeaderWidget` exposed — the footer
         // takes over the "always visible / context-utilisation / version /
         // status indicator / live marker" cluster as the header is removed.
-        let context_window = crate::models::context_window_for_model(&app.model);
-        let ctx = super::chips::context_signal_spans(
-            app.session.last_prompt_tokens,
-            context_window,
-            true,
-        );
+        // …except the context-utilisation chip itself: the sidebar's Context
+        // panel already carries `context: T/W tokens (X%)`, so we keep the
+        // ctx slot empty in the footer to avoid duplicating it.
+        let ctx: Vec<Span<'static>> = Vec::new();
+        // `context_window` and `last_prompt_tokens` are still consumed by
+        // the sidebar; here we just drop the chip on the footer side.
+        let _ = crate::models::context_window_for_model(&app.model);
         let status_indicator_started_at = if app.low_motion {
             None
         } else {
@@ -403,28 +407,42 @@ impl FooterWidget {
             return Vec::new();
         }
 
+        // Live marker `●` — moved here from the centre cluster so the
+        // streaming heartbeat sits directly next to the whale brand glyph.
+        // Painted before the whale so the visual order reads
+        // "(live dot) (whale) mode · model · …".
+        let live_marker_w = if self.props.live_marker.is_empty() {
+            0
+        } else {
+            // `●` (U+25CF) is unambiguously narrow + we always pad with a
+            // trailing space, so the cluster width is `width_of_marker + 1`.
+            // `span_width` would also report this exact value because the
+            // marker is not a wide grapheme.
+            span_width(&self.props.live_marker) + 1
+        };
+
         // Whale prefix — phase 5 follow-up: the status-indicator moved from
         // the centre cluster to the left so the footer always carries the
         // CodeWhale anchor. Idle = static first frame, in-flight = animated.
         //
-        // The prefix has a subtle width quirk. ratatui paints a wide-glyph's
-        // *continuation cell* (cell 1 of an emoji) with a literal `" "`
-        // symbol. When tests collect `(0..width).map(|x| buf[(x,0)].symbol())`
-        // into a string, that continuation space contributes another 1 col
-        // of *string* width on top of the emoji's own `unicode_width` 2.
-        // The actual painted col count is 2, but `line.width()` (which the
-        // overflow regression tests use) reads 3. To stay safe under that
-        // assertion model, we budget the prefix at `unicode_width(glyph) + 1`
-        // for both wide and narrow glyphs. For wide glyphs the +1 represents
-        // ratatui's continuation padding; for narrow glyphs it's the
-        // explicit `" "` separator we paint between glyph and `mode_label`.
+        // Width budget: `unicode_width(whale)` + 1 phantom (ratatui paints a
+        // continuation cell `" "` after every wide glyph) + 1 explicit
+        // separator space we add at render time. For a 2-col emoji that's
+        // `2 + 1 + 1 = 4`. `span_width` independently computes the same 4
+        // because it adds 1 per wide grapheme on top of `UnicodeWidthStr`.
         let whale_glyph = self.props.status_indicator.unwrap_or("");
         let whale_glyph_w = UnicodeWidthStr::width(whale_glyph);
         let whale_prefix_w = if whale_glyph.is_empty() {
             0
+        } else if whale_glyph_w >= 2 {
+            // Wide emoji (🐳): 2 cols + 1 phantom + 1 explicit space.
+            whale_glyph_w + 2
         } else {
+            // Narrow indicator (dots ◍/◉/◌): 1 col + 1 explicit space.
             whale_glyph_w + 1
         };
+
+        let prefix_w = live_marker_w + whale_prefix_w;
 
         let mode_label = self.props.mode_label;
         let sep = " \u{00B7} ";
@@ -449,8 +467,8 @@ impl FooterWidget {
 
         let extra_sep = |w: usize| if w > 0 { sep_w } else { 0 };
 
-        // Tier 1: whale mode · model · balance · cost · status
-        let full_w = whale_prefix_w
+        // Tier 1: live whale mode · model · balance · cost · status
+        let full_w = prefix_w
             + mode_w
             + sep_w
             + model_w
@@ -470,8 +488,8 @@ impl FooterWidget {
             );
         }
 
-        // Tier 2: whale mode · model · balance · cost — drop status.
-        let with_cost_w = whale_prefix_w
+        // Tier 2: live whale mode · model · balance · cost — drop status.
+        let with_cost_w = prefix_w
             + mode_w
             + sep_w
             + model_w
@@ -489,9 +507,9 @@ impl FooterWidget {
             );
         }
 
-        // Tier 3: whale mode · model · balance — drop cost.
+        // Tier 3: live whale mode · model · balance — drop cost.
         if show_balance {
-            let with_balance_w = whale_prefix_w + mode_w + sep_w + model_w + sep_w + balance_w;
+            let with_balance_w = prefix_w + mode_w + sep_w + model_w + sep_w + balance_w;
             if with_balance_w <= max_width {
                 return self.build_status_line_spans(
                     mode_label,
@@ -503,18 +521,18 @@ impl FooterWidget {
             }
         }
 
-        // Tier 4: whale mode · model — drop balance too.
-        let mode_model_w = whale_prefix_w + mode_w + sep_w + model_w;
+        // Tier 4: live whale mode · model — drop balance too.
+        let mode_model_w = prefix_w + mode_w + sep_w + model_w;
         if mode_model_w <= max_width {
             return self.build_status_line_spans(mode_label, model.to_string(), None, None, None);
         }
 
-        // Tier 5: whale mode · <truncated model> — keep both labels visible by
-        // ellipsizing the model name. Only do this when there is enough room
+        // Tier 5: live whale mode · <truncated model> — keep both labels visible
+        // by ellipsizing the model name. Only do this when there is enough room
         // for at least the ellipsis ("..."). Below that we drop to mode-only.
-        let prefix_w = whale_prefix_w + mode_w + sep_w;
-        if prefix_w < max_width {
-            let model_budget = max_width - prefix_w;
+        let tier5_left_w = prefix_w + mode_w + sep_w;
+        if tier5_left_w < max_width {
+            let model_budget = max_width - tier5_left_w;
             if model_budget >= 4 {
                 let truncated = truncate_to_width(model, model_budget);
                 if !truncated.is_empty() {
@@ -523,8 +541,8 @@ impl FooterWidget {
             }
         }
 
-        // Tier 6: whale mode-only.
-        let mode_only_w = whale_prefix_w + mode_w;
+        // Tier 6: live whale mode-only.
+        let mode_only_w = prefix_w + mode_w;
         if mode_only_w <= max_width {
             return self.build_status_line_spans(mode_label, String::new(), None, None, None);
         }
@@ -557,18 +575,24 @@ impl FooterWidget {
         let sep = " \u{00B7} ";
         let mut spans: Vec<Span<'static>> = Vec::new();
 
-        // Whale prefix — always emitted when the props carry a frame. For
-        // wide emoji (🐳) ratatui's continuation cell already paints a
-        // space-equivalent separator; for narrow glyphs (dots) we add an
-        // explicit space so the brand glyph isn't fused with `mode_label`.
+        // Live marker — when in flight, the streaming heartbeat sits before
+        // the whale so the visual order reads "● 🐳 mode · model · …".
+        // Idle turns leave this empty.
+        if !self.props.live_marker.is_empty() {
+            spans.extend(self.props.live_marker.iter().cloned());
+            spans.push(Span::raw(" "));
+        }
+
+        // Whale prefix — always emitted when the props carry a frame. We
+        // always paint an explicit trailing space (rather than relying on
+        // ratatui's wide-glyph continuation cell) so the brand glyph reads
+        // as a deliberate separator, not a fused part of `mode_label`.
         if let Some(frame) = self.props.status_indicator {
             spans.push(Span::styled(
                 frame.to_string(),
                 Style::default().fg(palette::ACCENT_PRIMARY),
             ));
-            if UnicodeWidthStr::width(frame) < 2 {
-                spans.push(Span::raw(" "));
-            }
+            spans.push(Span::raw(" "));
         }
 
         if !mode_label.is_empty() {
@@ -789,30 +813,12 @@ impl Renderable for FooterWidget {
         }
         let spacer_width = available_width.saturating_sub(left_width + right_width);
 
-        // Centre cluster: live `●` streaming marker only. The status
-        // indicator (whale animation) moved to the left of `mode_label` —
-        // the brand glyph anchors the row, and the dot marks "still
-        // generating" without doubling-up.
-        let mut centre_spans: Vec<Span<'static>> = Vec::new();
-        if !self.props.live_marker.is_empty() {
-            centre_spans.extend(self.props.live_marker.iter().cloned());
-        }
-        let centre_width = span_width(&centre_spans);
-
-        // Build the spacer: when the centre cluster fits with a min 1-col
-        // gap on each side, embed it; otherwise fall through to plain
-        // whitespace.
+        // Centre cluster: empty since the live `●` streaming marker moved to
+        // the left of the whale (so the visual order reads
+        // "● 🐳 mode · model · …"). We keep the variable for symmetry with
+        // the previous render path, but the spacer is now plain whitespace.
         let mut all_spans = left_spans;
-        if !centre_spans.is_empty() && spacer_width >= centre_width + 2 {
-            let total_pad = spacer_width - centre_width;
-            let left_pad = total_pad / 2;
-            let right_pad = total_pad - left_pad;
-            all_spans.push(Span::raw(" ".repeat(left_pad)));
-            all_spans.extend(centre_spans);
-            all_spans.push(Span::raw(" ".repeat(right_pad)));
-        } else {
-            all_spans.push(Span::raw(" ".repeat(spacer_width)));
-        }
+        all_spans.push(Span::raw(" ".repeat(spacer_width)));
         all_spans.extend(right_spans);
 
         let paragraph =
@@ -1317,8 +1323,11 @@ mod tests {
         );
     }
 
+    /// The footer no longer carries a context-utilisation chip — sidebar's
+    /// Context panel already shows `context: T/W tokens (X%)` so the footer
+    /// row stays empty even when `last_prompt_tokens` is known.
     #[test]
-    fn ctx_chip_appears_in_right_cluster_when_prompt_tokens_known() {
+    fn ctx_chip_does_not_appear_in_footer_even_when_prompt_tokens_known() {
         let mut app = make_app();
         app.session.last_prompt_tokens = Some(20_000);
         let props = idle_props_for(&app);
@@ -1328,8 +1337,12 @@ mod tests {
         widget.render(area, &mut buf);
         let rendered: String = (0..area.width).map(|x| buf[(x, 0)].symbol()).collect();
         assert!(
-            rendered.contains('%'),
-            "ctx chip with percent must render: {rendered:?}",
+            !rendered.contains("context left"),
+            "ctx chip must NOT render in footer (sidebar owns it): {rendered:?}",
+        );
+        assert!(
+            !rendered.contains('%'),
+            "ctx percent must NOT appear in footer: {rendered:?}",
         );
     }
 

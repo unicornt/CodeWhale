@@ -2486,6 +2486,8 @@ impl App {
     /// Estimated cost saved by the last turn's cache-hit tokens in the
     /// configured display currency.  Returns `None` when the model's pricing
     /// is unknown or there were no cache hits.
+    #[allow(dead_code)] // wired into `footer_cost_spans` only, which the
+                        // sidebar superseded.
     pub fn last_turn_cache_savings(&self) -> Option<f64> {
         let hit_tokens = self.session.last_prompt_cache_hit_tokens?;
         let estimate = crate::pricing::calculate_cache_savings(&self.model, hit_tokens)?;

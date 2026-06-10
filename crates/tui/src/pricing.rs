@@ -226,6 +226,8 @@ fn calculate_turn_cost_from_usage_with_pricing(pricing: CurrencyPricing, usage: 
 /// when the model's pricing is unknown or the number of cache-hit tokens is
 /// zero (nothing to save).
 #[must_use]
+#[allow(dead_code)] // consumed by `footer_cost_spans`, which moved to
+                    // sidebar surface; kept compiled for potential reuse.
 pub fn calculate_cache_savings(model: &str, cache_hit_tokens: u32) -> Option<CostEstimate> {
     if cache_hit_tokens == 0 {
         return None;
