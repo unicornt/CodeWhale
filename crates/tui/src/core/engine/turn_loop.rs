@@ -105,7 +105,7 @@ impl Engine {
             }
 
             // Ensure system prompt is up to date with latest session states
-            self.refresh_system_prompt(mode);
+            self.refresh_system_prompt();
 
             if turn.at_max_steps() {
                 let _ = self
@@ -469,8 +469,7 @@ impl Engine {
             // budget restarts with the fresh stream.
             let mut stream_start = Instant::now();
             let mut stream_content_bytes: usize = 0;
-            let chunk_timeout_secs = stream_chunk_timeout_secs();
-            let chunk_timeout = Duration::from_secs(chunk_timeout_secs);
+            let (chunk_timeout_secs, chunk_timeout) = stream_chunk_timeout_budget(&self.config);
             let max_duration = Duration::from_secs(STREAM_MAX_DURATION_SECS);
 
             // Process stream events
@@ -1260,6 +1259,14 @@ impl Engine {
             }
 
             // Execute tools
+            if self.shared_paused.lock().is_ok_and(|paused| *paused) {
+                let _ = self
+                    .tx_event
+                    .send(Event::status("Request was Paused"))
+                    .await;
+                return (TurnOutcomeStatus::Interrupted, None);
+            }
+
             let tool_exec_lock = self.tool_exec_lock.clone();
             let mcp_pool = if tool_uses
                 .iter()
@@ -2150,7 +2157,6 @@ impl Engine {
             if self
                 .run_capacity_post_tool_checkpoint(
                     turn,
-                    mode,
                     tool_registry,
                     tool_exec_lock.clone(),
                     mcp_pool.clone(),
@@ -2182,7 +2188,6 @@ impl Engine {
             if self
                 .run_capacity_error_escalation_checkpoint(
                     turn,
-                    mode,
                     step_error_count,
                     consecutive_tool_error_steps,
                     &step_error_categories,
@@ -2255,11 +2260,15 @@ impl Engine {
     }
 
     pub(super) fn messages_with_turn_metadata(&self) -> Vec<Message> {
-        // `<turn_meta>` is stored on user-text messages when the message is
-        // appended. Do not rewrite historical messages at request time: doing
-        // so makes the API prefix differ from the bytes sent in earlier turns
-        // and destroys DeepSeek's KV prefix cache reuse.
-        self.session.messages.clone()
+        // Keep stored history byte-stable and provider-compatible: runtime
+        // mode/approval contracts are projected as a transient user message
+        // at request time instead of being persisted as appended system
+        // messages. This preserves the stable prefix through all stored
+        // messages while avoiding strict chat templates that only allow
+        // system messages at messages[0].
+        let mut messages = self.session.messages.clone();
+        messages.push(self.runtime_prompt_message());
+        messages
     }
 }
 
@@ -2291,6 +2300,29 @@ XML unless the user explicitly asks to debug sub-agent internals.\n\n\
 
 fn should_hold_turn_for_subagents(queued_completions: usize, running_children: usize) -> bool {
     queued_completions > 0 || running_children > 0
+}
+
+fn stream_chunk_timeout_budget(config: &EngineConfig) -> (u64, Duration) {
+    let secs = config.stream_chunk_timeout.as_secs();
+    (secs, Duration::from_secs(secs))
+}
+
+#[cfg(test)]
+mod stream_timeout_tests {
+    use super::*;
+
+    #[test]
+    fn stream_chunk_timeout_budget_uses_engine_config() {
+        let config = EngineConfig {
+            stream_chunk_timeout: Duration::from_secs(42),
+            ..EngineConfig::default()
+        };
+
+        assert_eq!(
+            stream_chunk_timeout_budget(&config),
+            (42, Duration::from_secs(42))
+        );
+    }
 }
 
 fn command_allows_tool(allowed_tools: Option<&[String]>, tool_name: &str) -> bool {

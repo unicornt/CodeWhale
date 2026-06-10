@@ -25,6 +25,7 @@ Current packaging note:
   - `codewhale-core`
   - `codewhale-app-server`
   - `codewhale-tui-core`
+  - `codewhale-whaleflow`
 
 ## Version Coordination
 
@@ -119,20 +120,22 @@ configured.
    `main` and letting `auto-tag.yml` create the tag — see the npm wrapper
    release section below for the `RELEASE_TAG_PAT` requirement).
 4. Publish crates in this order with `./scripts/release/publish-crates.sh publish`:
-   - `codewhale-secrets`
-   - `codewhale-config`
+   - `codewhale-mcp`
    - `codewhale-protocol`
+   - `codewhale-release`
+   - `codewhale-secrets`
    - `codewhale-state`
-   - `codewhale-agent`
+   - `codewhale-tui-core`
+   - `codewhale-whaleflow`
    - `codewhale-execpolicy`
    - `codewhale-hooks`
-   - `codewhale-mcp`
    - `codewhale-tools`
+   - `codewhale-config`
+   - `codewhale-agent`
+   - `codewhale-tui`
    - `codewhale-core`
    - `codewhale-app-server`
-   - `codewhale-tui-core`
    - `codewhale-cli`
-   - `codewhale-tui`
 5. Wait for each published crate version to appear on crates.io before publishing dependents.
 
 The publish helper is idempotent for reruns: already-published crate versions are skipped.
@@ -202,6 +205,18 @@ remote add cnb …`, then `git push cnb vX.Y.Z`).
 
 ## Recovery and Rollback
 
+- User-facing rollback:
+  - npm: `npm install -g codewhale@X.Y.Z`
+  - Cargo: `cargo install codewhale-cli --version X.Y.Z --locked --force`
+    and `cargo install codewhale-tui --version X.Y.Z --locked --force`
+  - manual assets: download binaries or the platform archive plus the matching
+    `codewhale-artifacts-sha256.txt` or `codewhale-bundles-sha256.txt`
+    manifest from `https://github.com/Hmbown/CodeWhale/releases/tag/vX.Y.Z`
+  - workspace files: use `/restore list [N]` and `/restore <N>` for side-git
+    snapshots; this does not change the installed binary version or rewrite
+    conversation history
+  - keep [docs/INSTALL.md](INSTALL.md#roll-back-to-a-previous-release) in sync
+    with these commands
 - Crates publish partially:
   - rerun `./scripts/release/publish-crates.sh publish`
   - already-published crate versions will be skipped

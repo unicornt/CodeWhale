@@ -872,6 +872,7 @@ fn build_engine_config(app: &App, config: &Config) -> EngineConfig {
         subagent_model_overrides: config.subagent_model_overrides(),
         subagent_api_timeout: Duration::from_secs(config.subagent_api_timeout_secs()),
         subagent_heartbeat_timeout: Duration::from_secs(config.subagent_heartbeat_timeout_secs()),
+        stream_chunk_timeout: Duration::from_secs(app.stream_chunk_timeout_secs),
         prefer_bwrap: config.prefer_bwrap.unwrap_or(false),
         memory_enabled: config.memory_enabled(),
         memory_path: config.memory_path(),
@@ -883,6 +884,7 @@ fn build_engine_config(app: &App, config: &Config) -> EngineConfig {
         workshop: config.workshop.clone(),
         search_provider: config.search_provider(),
         search_api_key: config.search.as_ref().and_then(|s| s.api_key.clone()),
+        search_base_url: config.search.as_ref().and_then(|s| s.base_url.clone()),
         tools_always_load: config.tools_always_load(),
         tools: config.tools.clone(),
     }
@@ -3450,6 +3452,10 @@ async fn run_event_loop(
                             current_streaming_text.clear();
                             app.status_message = Some("Request cancelled".to_string());
                         }
+                        EscapeAction::PauseCommand => {
+                            app.backtrack.reset();
+                            pause_pausable_command(app, &engine_handle);
+                        }
                         EscapeAction::DiscardQueuedDraft => {
                             app.backtrack.reset();
                             app.queued_draft = None;
@@ -4905,7 +4911,7 @@ async fn dispatch_user_message(
         auto_selection
             .as_ref()
             .map(|selection| selection.model.clone())
-            .unwrap_or_else(|| commands::auto_model_heuristic(&message.display, &app.model))
+            .unwrap_or_else(|| crate::model_routing::auto_model_heuristic(&message.display, &app.model))
     } else {
         app.model.clone()
     };
@@ -5365,7 +5371,7 @@ async fn switch_provider(
         .await;
 
     let persist_warning = (|| -> anyhow::Result<()> {
-        commands::persist_root_string_key(app.config_path.as_deref(), "provider", target.as_str())?;
+        crate::config_persistence::persist_root_string_key(app.config_path.as_deref(), "provider", target.as_str())?;
 
         let mut settings = crate::settings::Settings::load()?;
         settings.default_provider = Some(target.as_str().to_string());
@@ -5742,6 +5748,7 @@ async fn apply_command_result(
                         .push(crate::tui::views::status_picker::StatusPickerView::new(
                             &app.status_items,
                             app.api_provider,
+                            app.ui_locale,
                         ));
                 }
             }
@@ -5915,6 +5922,11 @@ async fn apply_command_result(
                     content: status.clone(),
                 });
                 app.status_message = Some(status);
+            }
+            AppAction::UpdateStreamChunkTimeout(timeout_secs) => {
+                let _ = engine_handle
+                    .send(Op::SetStreamChunkTimeout { timeout_secs })
+                    .await;
             }
         }
     }
@@ -6096,9 +6108,9 @@ async fn handle_mcp_ui_action(
         let network_policy = config.network.clone().map(|toml_cfg| {
             crate::network_policy::NetworkPolicyDecider::with_default_audit(toml_cfg.into_runtime())
         });
-        mcp::discover_manager_snapshot(&path, network_policy, app.mcp_restart_required).await
+        mcp::discover_manager_snapshot_with_workspace(&path, &app.workspace, network_policy, app.mcp_restart_required).await
     } else {
-        mcp::manager_snapshot_from_config(&path, app.mcp_restart_required)
+        mcp::manager_snapshot_from_config_with_workspace(&path, &app.workspace, app.mcp_restart_required)
     };
 
     match snapshot_result {
@@ -7160,7 +7172,7 @@ async fn handle_view_events(
                 app.status_items = items.clone();
                 app.needs_redraw = true;
                 if final_save {
-                    match commands::persist_status_items(&items) {
+                    match crate::config_persistence::persist_status_items(&items) {
                         Ok(path) => {
                             app.status_message =
                                 Some(format!("Status line saved to {}", path.display()));
@@ -7373,6 +7385,27 @@ fn mark_active_turn_cancelled_locally(app: &mut App) {
     crate::tui::notifications::stop_title_animation_quietly();
 }
 
+fn pause_pausable_command(app: &mut App, engine_handle: &EngineHandle) {
+    app.paused_quarry = app
+        .paused_quarry
+        .clone()
+        .or_else(|| app.hunt.quarry.clone());
+    app.hunt.quarry = None;
+    app.paused = true;
+    app.pausable = true;
+    engine_handle.set_paused(true);
+    app.status_message = Some(
+        "Request paused. Send `continue` or `resume` to continue, or Esc to cancel.".to_string(),
+    );
+}
+
+fn clear_paused_command_state(app: &mut App, engine_handle: &EngineHandle) {
+    app.pausable = false;
+    app.paused = false;
+    app.paused_quarry = None;
+    engine_handle.set_paused(false);
+}
+
 fn suppress_engine_event_after_local_cancel(event: &EngineEvent) -> bool {
     matches!(
         event,
@@ -7573,6 +7606,8 @@ async fn apply_provider_picker_api_key(
             ApiProvider::Vllm => &mut providers.vllm,
             ApiProvider::Ollama => &mut providers.ollama,
             ApiProvider::Huggingface => &mut providers.huggingface,
+            ApiProvider::Together => &mut providers.together,
+            ApiProvider::OpenaiCodex => &mut providers.openai_codex,
         };
         entry.api_key = Some(api_key);
     }
@@ -7630,6 +7665,8 @@ fn set_provider_auth_mode_in_memory(config: &mut Config, provider: ApiProvider, 
         ApiProvider::Vllm => &mut providers.vllm,
         ApiProvider::Ollama => &mut providers.ollama,
         ApiProvider::Huggingface => &mut providers.huggingface,
+        ApiProvider::Together => &mut providers.together,
+        ApiProvider::OpenaiCodex => &mut providers.openai_codex,
     };
     entry.auth_mode = Some(auth_mode);
 }
@@ -8529,6 +8566,7 @@ fn activity_cell_rank(cell: &HistoryCell) -> Option<u8> {
             Some(ToolStatus::Running) => Some(0),
             Some(ToolStatus::Failed) => Some(1),
             Some(ToolStatus::Success) => Some(2),
+            Some(ToolStatus::Hydrated) => Some(2),
             None => Some(2),
         },
         HistoryCell::SubAgent(_) => Some(0),
@@ -8795,6 +8833,7 @@ fn activity_status_label(status: ToolStatus) -> &'static str {
         ToolStatus::Running => "running",
         ToolStatus::Success => "done",
         ToolStatus::Failed => "failed",
+        ToolStatus::Hydrated => "loaded",
     }
 }
 

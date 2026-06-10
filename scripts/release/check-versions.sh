@@ -96,10 +96,22 @@ if [[ -z "${compare_line}" ]]; then
   fail=1
 fi
 
+unreleased_section="$(
+  awk '
+    index($0, "## [Unreleased]") == 1 { in_section = 1; print; next }
+    in_section && /^## \[/ { exit }
+    in_section { print }
+  ' CHANGELOG.md
+)"
+credit_sections="${current_section}
+${unreleased_section}"
+
 # 6) Contributor-credit cross-check for README additions on the release branch.
 # This cannot prove every external PR author has been credited, but it does
 # catch the common release-polish failure mode: adding a README contributor row
-# without mentioning that credit/correction in the current release entry.
+# without mentioning that credit/correction in the current release entry. While
+# a release branch is still unbumped, `[Unreleased]` is also a valid credit
+# surface.
 previous_tag=""
 current_tag="v${workspace_version}"
 if [[ "${compare_line}" =~ compare/(v[0-9]+\.[0-9]+\.[0-9]+)\.\.\.${current_tag} ]]; then
@@ -114,8 +126,8 @@ if [[ -n "${previous_tag}" ]]; then
       [[ -z "${line}" ]] && continue
       handle="$(sed -E 's#.*github.com/([^)/]+).*#\1#' <<<"${line}")"
       if [[ -n "${handle}" && "${handle}" != "${line}" ]]; then
-        if ! grep -Fq "github.com/${handle}" <<<"${current_section}" && ! grep -Fq "@${handle}" <<<"${current_section}"; then
-          echo "::error::README.md adds contributor @${handle}, but CHANGELOG.md ${workspace_version} does not mention that credit." >&2
+        if ! grep -Fq "github.com/${handle}" <<<"${credit_sections}" && ! grep -Fq "@${handle}" <<<"${credit_sections}"; then
+          echo "::error::README.md adds contributor @${handle}, but CHANGELOG.md ${workspace_version} or [Unreleased] does not mention that credit." >&2
           fail=1
         fi
       fi

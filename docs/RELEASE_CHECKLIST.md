@@ -6,6 +6,11 @@ Step through this in order from a clean worktree on the release branch
 
 For deeper context on the underlying tools (preflight scripts, npm smoke,
 publish-crates), see [`RELEASE_RUNBOOK.md`](RELEASE_RUNBOOK.md).
+For v0.9.0, also complete the dedicated
+[`V0_9_0_RELEASE_ACCEPTANCE.md`](V0_9_0_RELEASE_ACCEPTANCE.md) matrix before
+tagging; it covers provider routes, WhaleFlow feature gates, GUI/runtime smoke,
+remote workbench decisions, and credit hygiene that the generic checklist does
+not enumerate.
 
 ## 1. CHANGELOG entry exists for the version
 
@@ -39,6 +44,9 @@ publish-crates), see [`RELEASE_RUNBOOK.md`](RELEASE_RUNBOOK.md).
 - [ ] `Cargo.lock` is refreshed (`cargo update --workspace --offline`).
 - [ ] `./scripts/release/check-versions.sh` reports
       `Version state OK: workspace=X.Y.Z, npm=X.Y.Z, lockfile in sync.`
+- [ ] `./scripts/release/check-ohos-deps.sh` reports that the OpenHarmony
+      target graph does not pull the unsupported `nix` 0.28/0.29,
+      `portable-pty`, `starlark`, `arboard`, or `keyring` crates.
 
 ## 3. Preflight gates
 
