@@ -1218,6 +1218,7 @@ pub struct ToolEvidence {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub(crate) struct PendingProviderSwitch {
     pub previous_provider: ApiProvider,
     pub previous_model: String,
@@ -1266,6 +1267,7 @@ pub struct App {
     /// Monotonic turn counter for stale-suggestion protection. Incremented on
     /// each TurnStarted; background suggestion tasks capture the token and
     /// discard their result if the token no longer matches.
+    #[allow(dead_code)]
     pub prompt_suggestion_gen: std::sync::atomic::AtomicU64,
     /// Degraded connectivity mode; new user inputs are queued for later retry.
     pub offline_mode: bool,
@@ -1302,6 +1304,7 @@ pub struct App {
     pub model_ids_passthrough: bool,
     /// Pending provider transition for transactional rollback when the next
     /// auth failure indicates the new provider cannot be used.
+    #[allow(dead_code)]
     pub pending_provider_switch: Option<PendingProviderSwitch>,
     /// Current reasoning-effort tier for DeepSeek thinking mode.
     /// Cycled via Shift+Tab; initialized from config at startup.
@@ -1619,6 +1622,7 @@ pub struct App {
     /// Shared cell updated by background fetch tasks; read lock in the UI thread.
     pub balance_cell: std::sync::Arc<std::sync::Mutex<Option<crate::pricing::BalanceInfo>>>,
     /// Shared cell for async prompt suggestion delivery from background task.
+    #[allow(dead_code)]
     pub prompt_suggestion_cell: std::sync::Arc<std::sync::Mutex<Option<(u64, String)>>>,
     /// Tracks whether the initial balance fetch has been attempted for this session.
     pub balance_initiated: bool,
@@ -4756,6 +4760,7 @@ impl App {
 
     /// Stop editing a queued follow-up and put the original queued message back
     /// at the tail where [`Self::pop_last_queued_into_draft`] took it from.
+    #[allow(dead_code)]
     pub fn cancel_queued_draft_edit(&mut self) -> bool {
         let Some(draft) = self.queued_draft.take() else {
             return false;

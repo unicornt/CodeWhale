@@ -77,6 +77,7 @@ impl<W: Write> ColorCompatBackend<W> {
         self.forced_size = None;
     }
 
+    #[allow(dead_code)]
     pub(crate) fn set_terminal_size(&mut self, size: Size) {
         self.terminal_size = Some(size);
     }

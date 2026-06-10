@@ -4,6 +4,8 @@
 //! follow-up question the user might want to ask next. The suggestion is
 //! rendered as dimmed ghost text in the composer when the input is empty.
 
+#![allow(dead_code)]
+
 use std::sync::OnceLock;
 
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE};

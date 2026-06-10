@@ -486,6 +486,7 @@ enum MessageSubmitStdout {
 
 /// Post-turn accumulated totals included in the `turn_end` observer payload.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
 pub struct TurnEndTotals {
     pub session_tokens: u32,
     pub conversation_tokens: u32,
@@ -494,6 +495,7 @@ pub struct TurnEndTotals {
 }
 
 /// Input used to build the structured `turn_end` observer payload.
+#[allow(dead_code)]
 pub struct TurnEndPayloadInput<'a> {
     pub context: &'a HookContext,
     pub turn_id: Option<&'a str>,
@@ -1147,6 +1149,7 @@ fn message_submit_payload(context: &HookContext, text: &str) -> serde_json::Valu
     })
 }
 
+#[allow(dead_code)]
 pub fn turn_end_payload(input: TurnEndPayloadInput<'_>) -> serde_json::Value {
     json!({
         "event": HookEvent::TurnEnd.as_str(),
@@ -1178,6 +1181,7 @@ pub fn turn_end_payload(input: TurnEndPayloadInput<'_>) -> serde_json::Value {
     })
 }
 
+#[allow(dead_code)]
 fn duration_ms_saturating(duration: Duration) -> u64 {
     u64::try_from(duration.as_millis()).unwrap_or(u64::MAX)
 }

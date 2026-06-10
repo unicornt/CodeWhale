@@ -7399,6 +7399,7 @@ fn pause_pausable_command(app: &mut App, engine_handle: &EngineHandle) {
     );
 }
 
+#[allow(dead_code)]
 fn clear_paused_command_state(app: &mut App, engine_handle: &EngineHandle) {
     app.pausable = false;
     app.paused = false;
