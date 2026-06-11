@@ -6532,6 +6532,13 @@ fn build_pending_input_preview(app: &App) -> PendingInputPreview {
         .iter()
         .map(|m| m.display.clone())
         .collect();
+    // When the user pulled the most recent queued message into the draft
+    // for editing (via `pop_last_queued_into_draft`), surface that as a
+    // separate "editing queued message" row so the preview labels what
+    // they're holding instead of pretending the queue still owns it.
+    if app.queued_draft.is_some() {
+        preview.editing_queued_message = Some(app.input.clone());
+    }
     preview
 }
 
