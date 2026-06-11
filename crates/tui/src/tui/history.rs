@@ -35,7 +35,10 @@ const TOOL_RUNNING_SYMBOLS: [&str; 4] = ["·", "◦", "•", "◦"];
 const TOOL_STATUS_SYMBOL_MS: u64 = 720;
 /// Visual marker for the user role at the start of their message line. Solid
 /// vertical bar — no animation; user input is a finished thing.
-const USER_GLYPH: &str = "\u{258E}"; // ▎
+/// Phase 5 follow-up: switched to `❯` (U+276F) so the user-message
+/// prefix in transcript history visually mirrors the composer's prompt
+/// (both render as the same heavy right-pointing chevron).
+const USER_GLYPH: &str = "\u{276F}"; // ❯
 /// Visual marker for the assistant role. Solid bullet that pulses at 2s
 /// cycle while the response is streaming, holds full brightness when idle.
 const ASSISTANT_GLYPH: &str = "\u{25CF}"; // ●

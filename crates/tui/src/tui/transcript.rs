@@ -648,7 +648,7 @@ mod tests {
         let lines = cache.lines();
         assert_eq!(lines[0].style.bg, Some(palette::SURFACE_ELEVATED));
         assert_eq!(lines[0].width(), 40);
-        assert_eq!(plain_lines(&cache)[0].trim_end(), "▎ # literal user prompt");
+        assert_eq!(plain_lines(&cache)[0].trim_end(), "❯ # literal user prompt");
     }
 
     #[test]

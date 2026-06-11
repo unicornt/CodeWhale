@@ -1113,7 +1113,7 @@ impl Renderable for ComposerWidget<'_> {
                     break;
                 }
                 buf[(prefix_x, cell_y)]
-                    .set_symbol(">")
+                    .set_symbol("\u{276F}")
                     .set_style(prefix_style);
                 buf[(prefix_x.saturating_add(1), cell_y)]
                     .set_symbol(" ")
