@@ -144,6 +144,76 @@ The release-tagged binaries on the upstream GitHub Releases page do **not**
 include this fork's TUI changes — you must build from this branch to see
 them.
 
+## How to use
+
+This fork isn't published to any registry — you build it from source and run
+it directly.
+
+### Prerequisites
+
+- **Rust 1.88+** ([rustup.rs](https://rustup.rs))
+- A **DeepSeek API key** ([platform.deepseek.com/api_keys](https://platform.deepseek.com/api_keys))
+
+### 1. Clone and build
+
+```bash
+git clone https://github.com/ivorzhao/CodeWhale.git
+cd CodeWhale
+cargo build -p codewhale-tui --release
+```
+
+The dispatcher binary is `target/release/codewhale`, the TUI runtime is
+`target/release/codewhale-tui`.
+
+### 2. Set your API key
+
+Either through environment variable:
+
+```bash
+export DEEPSEEK_API_KEY="sk-..."
+```
+
+Or by writing a config file at `~/.codewhale/config.toml`:
+
+```toml
+provider = "deepseek"
+api_key = "sk-..."
+```
+
+See `config.example.toml` and [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md)
+for every provider, model, and tuning knob.
+
+### 3. Launch
+
+```bash
+./target/release/codewhale
+```
+
+CodeWhale starts in your current directory. Give it a task, and it reads files,
+runs commands, and edits code — all visible in the transcript.
+
+### 4. Basics
+
+| What | How |
+|---|---|
+| Switch mode | `/mode agent`, `/mode plan`, `/mode yolo` |
+| Change model | `/model deepseek-v4-flash` |
+| Switch provider | `/provider deepseek` |
+| See all commands | `/help` |
+| Clear conversation | `/clear` or `Ctrl+L` |
+| Open sidebar help | `?` |
+| Exit | `/exit` or `Ctrl+C` |
+
+For a deeper walkthrough, see [`docs/GUIDE.md`](docs/GUIDE.md).
+
+### Caveat
+
+Everything except the on-screen look is identical to upstream CodeWhale:
+configuration, slash commands, agent loop, tool system, model routing — they
+all work the same way. The upstream docs at
+[`docs/`](docs/) and the [upstream
+README](https://github.com/Hmbown/CodeWhale/blob/main/README.md) still apply.
+
 ## Contributing back
 
 This fork's changes are intended to be upstreamed once phase 6 is reviewed.

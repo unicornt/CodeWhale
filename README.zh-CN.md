@@ -131,6 +131,74 @@ cargo test  -p codewhale-tui --bin codewhale-tui
 上游 GitHub Releases 上的二进制**不**包含本 fork 的 TUI 改动 —— 想看新 UI
 必须从本分支自己 build。
 
+## 如何使用
+
+本 fork 没有发布到任何 registry —— 从源码构建后直接使用。
+
+### 前置条件
+
+- **Rust 1.88+**（[rustup.rs](https://rustup.rs)）
+- **DeepSeek API key**（[platform.deepseek.com/api_keys](https://platform.deepseek.com/api_keys)）
+
+### 1. 克隆并构建
+
+```bash
+git clone https://github.com/ivorzhao/CodeWhale.git
+cd CodeWhale
+cargo build -p codewhale-tui --release
+```
+
+dispatcher 二进制是 `target/release/codewhale`，TUI 运行时是
+`target/release/codewhale-tui`。
+
+### 2. 设置 API key
+
+通过环境变量：
+
+```bash
+export DEEPSEEK_API_KEY="sk-..."
+```
+
+或写入 `~/.codewhale/config.toml`：
+
+```toml
+provider = "deepseek"
+api_key = "sk-..."
+```
+
+完整配置项见 `config.example.toml` 和
+[`docs/CONFIGURATION.md`](docs/CONFIGURATION.md)。
+
+### 3. 启动
+
+```bash
+./target/release/codewhale
+```
+
+CodeWhale 在当前目录启动。给它一个任务，它会读取文件、执行命令、编辑代码 ——
+全过程在对话区可见。
+
+### 4. 基本操作
+
+| 操作 | 命令 |
+|---|---|
+| 切换模式 | `/mode agent`、`/mode plan`、`/mode yolo` |
+| 切换模型 | `/model deepseek-v4-flash` |
+| 切换 provider | `/provider deepseek` |
+| 查看所有命令 | `/help` |
+| 清空对话 | `/clear` 或 `Ctrl+L` |
+| 打开 sidebar 帮助 | `?` |
+| 退出 | `/exit` 或 `Ctrl+C` |
+
+更完整的使用指南见 [`docs/GUIDE.md`](docs/GUIDE.md)。
+
+### 注意事项
+
+除了屏幕上的外观不同，其他方面与上游 CodeWhale 完全一致：
+配置格式、slash commands、agent loop、工具系统、模型路由 —— 全都一样用。
+上游 [`docs/`](docs/) 下的文档和[上游
+README](https://github.com/Hmbown/CodeWhale/blob/main/README.md) 同样适用。
+
 ## 回流上游
 
 本 fork 的改动计划在 phase 6 review 完之后回上游。在那之前
