@@ -17,26 +17,11 @@ sidebar shares one canvas with the chat.
 
 ![Empty-state welcome](docs/start_snapshot.png)
 
-A live turn — thinking block, tool calls, sidebar showing recent tools and
-session state, footer running the whale brand glyph next to `mode · model ·
-cost · saved`, with `% context left`, `Cache: hit` and `worked` chips on the
-right.
+Running screenshots:
 
-![Active turn — thinking + tool calls](docs/running_snapshot2.png)
-
-A second active-turn snapshot — different turn, mostly tool output, showing
-how the cell rail keeps the chat readable even when several tool cards
-stack.
-
-![Active turn — tool-heavy](docs/running_snapshot.png)
-
-A third active-turn snapshot — running with the new **White Light** theme:
-pure white background, DeepSeek-blue accents on completed tool `[✓]` marks,
-assistant label dots, and cache-hit chips; completed thinking blocks and
-tool cards auto-collapse to a single-line header with a "Space to expand"
-affordance.
-
-![Active turn — White Light theme](docs/running_snapshot3.png)
+![Running](docs/running_snapshot.png)
+![Running](docs/running_snapshot2.png)
+![Running](docs/running_snapshot3.png)
 
 ---
 

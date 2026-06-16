@@ -16,22 +16,11 @@
 
 ![启动空态](docs/start_snapshot.png)
 
-运行中的一轮对话——thinking 块、tool 调用、sidebar 展示 recent tools 和
-session 信息，footer 左侧鲸鱼图标紧贴 `mode · model · cost · saved`，
-右侧 `% context left`、`Cache: hit`、`worked` 等 chip。
+运行时截图展示如下：
 
-![运行中——thinking + tool 调用](docs/running_snapshot2.png)
-
-另一轮活跃截图——以工具输出为主，展示在多个工具卡叠加时 cell rail
-仍能保持 chat 可读性。
-
-![运行中——工具调用密集](docs/running_snapshot.png)
-
-第三张运行截图——使用全新的 **White Light** 主题：纯白底色，已完成的工具
-`[✓]`、模型输出圆点 `●`、cache hit 等强调色统一为 DeepSeek 蓝；完成的 thinking
-块和 tool 卡片自动折叠为一行 header，底部提示「Space to expand」可按空格展开。
-
-![运行中——White Light 主题](docs/running_snapshot3.png)
+![运行中](docs/running_snapshot.png)
+![运行中](docs/running_snapshot2.png)
+![运行中](docs/running_snapshot3.png)
 
 ---
 
