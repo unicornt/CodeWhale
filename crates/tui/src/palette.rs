@@ -101,6 +101,7 @@ pub const LIGHT_TEXT_SOFT_RGB: (u8, u8, u8) = (30, 41, 59); // #1E293B
 // White Light palette RGB tuples — pure white bg, light-gray depth layers
 pub const WHITE_SURFACE_RGB: (u8, u8, u8) = (255, 255, 255); // #FFFFFF
 pub const WHITE_PANEL_RGB: (u8, u8, u8) = (247, 247, 248); // #F7F7F8
+#[allow(dead_code)]
 pub const WHITE_ELEVATED_RGB: (u8, u8, u8) = (239, 239, 240); // #EFEFF0
 pub const WHITE_SELECTION_RGB: (u8, u8, u8) = (226, 226, 229); // #E2E2E5
 pub const WHITE_BORDER_RGB: (u8, u8, u8) = (212, 212, 216); // #D4D4D8
