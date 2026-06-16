@@ -1,27 +1,17 @@
 {
-  "name": "codewhale",
-  "version": "0.8.55",
-  "codewhaleBinaryVersion": "0.8.55",
-  "description": "Install and run CodeWhale, the agentic terminal for open-source and open-weight coding models, from GitHub release artifacts.",
-  "author": "Hmbown",
+  "name": "codewhale-unicornt",
+  "version": "0.8.55-unicornt",
+  "codewhaleBinaryVersion": "0.8.55-unicornt",
+  "description": "CodeWhale TUI fork — install and run the forked CodeWhale TUI from GitHub release artifacts.",
+  "author": "unicornt",
   "license": "MIT",
-  "funding": [
-    {
-      "type": "github",
-      "url": "https://github.com/sponsors/Hmbown"
-    },
-    {
-      "type": "buymeacoffee",
-      "url": "https://www.buymeacoffee.com/hmbown"
-    }
-  ],
-  "homepage": "https://github.com/Hmbown/CodeWhale",
+  "homepage": "https://github.com/unicornt/CodeWhale",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Hmbown/CodeWhale.git"
+    "url": "git+https://github.com/unicornt/CodeWhale.git"
   },
   "bugs": {
-    "url": "https://github.com/Hmbown/CodeWhale/issues"
+    "url": "https://github.com/unicornt/CodeWhale/issues"
   },
   "keywords": [
     "codewhale",

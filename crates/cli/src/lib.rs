@@ -1773,7 +1773,7 @@ The `codewhale` dispatcher delegates interactive sessions to a sibling \
   • npm:    npm install -g codewhale                (downloads both binaries)\n\
   • cargo:  cargo install codewhale-cli codewhale-tui --locked\n\
   • GitHub Releases: download BOTH `codewhale-<platform>` AND \
-`codewhale-tui-<platform>` from https://github.com/Hmbown/CodeWhale/releases/latest \
+`codewhale-tui-<platform>` from https://github.com/unicornt/CodeWhale/releases/latest \
 and place them in the same directory.\n\
 \n\
 Or set DEEPSEEK_TUI_BIN to the absolute path of an existing `codewhale-tui` binary.",

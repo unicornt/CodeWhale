@@ -11,14 +11,14 @@ pub const CHECKSUM_MANIFEST_ASSET: &str = "codewhale-artifacts-sha256.txt";
 
 /// GitHub API URL for the single latest stable release.
 pub const LATEST_RELEASE_URL: &str =
-    "https://api.github.com/repos/Hmbown/CodeWhale/releases/latest";
+    "https://api.github.com/repos/unicornt/CodeWhale/releases/latest";
 
 /// GitHub API URL listing recent releases (up to 100), used to find beta tags.
 pub const RELEASES_URL: &str =
-    "https://api.github.com/repos/Hmbown/CodeWhale/releases?per_page=100";
+    "https://api.github.com/repos/unicornt/CodeWhale/releases?per_page=100";
 
 /// Base URL of the CodeWhale repository on the CNB mirror platform.
-pub const CNB_REPO_URL: &str = "https://cnb.cool/codewhale.net/codewhale";
+pub const CNB_REPO_URL: &str = "https://cnb.cool/unicornt/CodeWhale";
 
 /// Environment variable that overrides the base URL for release asset downloads.
 pub const RELEASE_BASE_URL_ENV: &str = "CODEWHALE_RELEASE_BASE_URL";
@@ -41,7 +41,7 @@ pub const LEGACY_UPDATE_VERSION_ENV: &str = "DEEPSEEK_VERSION";
 /// User-Agent header sent with release metadata requests.
 pub const UPDATE_USER_AGENT: &str = "codewhale-updater";
 
-const CNB_RELEASE_ASSET_BASE: &str = "https://cnb.cool/Hmbown/CodeWhale/-/releases";
+const CNB_RELEASE_ASSET_BASE: &str = "https://cnb.cool/unicornt/CodeWhale/-/releases";
 const RELEASE_METADATA_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// The release channel to query for updates.
@@ -353,11 +353,11 @@ mod tests {
     fn cnb_release_base_url_includes_tag_directory() {
         assert_eq!(
             cnb_release_base_url("0.8.47"),
-            "https://cnb.cool/Hmbown/CodeWhale/-/releases/v0.8.47"
+            "https://cnb.cool/unicornt/CodeWhale/-/releases/v0.8.47"
         );
         assert_eq!(
             cnb_release_base_url("v0.8.47"),
-            "https://cnb.cool/Hmbown/CodeWhale/-/releases/v0.8.47"
+            "https://cnb.cool/unicornt/CodeWhale/-/releases/v0.8.47"
         );
     }
 

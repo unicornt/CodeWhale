@@ -11,7 +11,7 @@ Only the latest stable release receives security patches. No backports to older 
 | latest stable | :white_check_mark: |
 | < latest | :x: |
 
-Check the [releases page](https://github.com/Hmbown/CodeWhale/releases) for the current version.
+Check the [releases page](https://github.com/unicornt/CodeWhale/releases) for the current version.
 
 ## Reporting a Vulnerability
 
@@ -19,7 +19,7 @@ Check the [releases page](https://github.com/Hmbown/CodeWhale/releases) for the 
 
 Report privately via one of:
 
-- **GitHub private advisory**: [github.com/Hmbown/CodeWhale/security/advisories/new](https://github.com/Hmbown/CodeWhale/security/advisories/new)
+- **GitHub private advisory**: [github.com/unicornt/CodeWhale/security/advisories/new](https://github.com/unicornt/CodeWhale/security/advisories/new)
 - **Email**: [security@deepseek-tui.com](mailto:security@deepseek-tui.com) — include `[SECURITY]` in the subject line
 
 Include in your report:

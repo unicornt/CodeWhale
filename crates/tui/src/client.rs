@@ -658,7 +658,7 @@ impl DeepSeekClient {
             concat!(
                 "Mozilla/5.0 (compatible; codewhale/",
                 env!("CARGO_PKG_VERSION"),
-                "; +https://github.com/Hmbown/CodeWhale)"
+                "; +https://github.com/unicornt/CodeWhale)"
             )
         };
         let mut builder = crate::tls::reqwest_client_builder()

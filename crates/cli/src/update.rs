@@ -1,7 +1,7 @@
 //! Self-update for the `codewhale` binary.
 //!
 //! The `update` subcommand fetches the latest release from
-//! `github.com/Hmbown/CodeWhale/releases/latest`, downloads the
+//! `github.com/unicornt/CodeWhale/releases/latest`, downloads the
 //! platform-correct binary, verifies its SHA256 checksum, and atomically
 //! replaces the currently running binary.
 
@@ -919,11 +919,11 @@ E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-win
     fn cnb_release_base_url_includes_tag_directory() {
         assert_eq!(
             codewhale_release::cnb_release_base_url("0.8.47"),
-            "https://cnb.cool/Hmbown/CodeWhale/-/releases/v0.8.47"
+            "https://cnb.cool/unicornt/CodeWhale/-/releases/v0.8.47"
         );
         assert_eq!(
             codewhale_release::cnb_release_base_url("v0.8.47"),
-            "https://cnb.cool/Hmbown/CodeWhale/-/releases/v0.8.47"
+            "https://cnb.cool/unicornt/CodeWhale/-/releases/v0.8.47"
         );
     }
 
