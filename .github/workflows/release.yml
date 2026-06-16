@@ -500,44 +500,32 @@ jobs:
           files: artifacts/*/*
           prerelease: false
           body: |
-            > **CodeWhale** is the canonical project, command, npm package, and
-            > release-asset name. The legacy npm package `deepseek-tui` is
-            > deprecated and receives no further releases. Users coming from
-            > v0.8.x legacy `deepseek` / `deepseek-tui` names should migrate
-            > with `docs/REBRAND.md`.
+            > **CodeWhale TUI fork** by @unicornt — a Claude Code‑style TUI rewrite
+            > of [Hmbown/CodeWhale](https://github.com/Hmbown/CodeWhale) v0.8.53.
+            > This release is independent from the upstream npm / crates.io distribution.
 
             ## Install
 
-            ### Recommended — npm (one command, both binaries)
+            ### npm (recommended)
 
             ```bash
-            npm install -g codewhale
+            npm install -g codewhale-unicornt
             ```
 
-            The wrapper downloads both binaries from this Release and places them in the same directory.
+            The wrapper downloads both binaries from this Release.
 
-            ### Docker / GHCR
+            ### Source build (Linux / macOS)
 
             ```bash
-            docker run --rm -it \
-              -e DEEPSEEK_API_KEY="$DEEPSEEK_API_KEY" \
-              -v ~/.deepseek:/home/codewhale/.deepseek \
-              ghcr.io/hmbown/codewhale:${{ needs.resolve.outputs.tag }}
+            git clone https://github.com/unicornt/CodeWhale.git
+            cd CodeWhale
+            cargo build --release
+            cp target/release/codewhale target/release/codewhale-tui ~/.local/bin/
             ```
 
-            The image ships the `codewhale` dispatcher and `codewhale-tui` runtime. The `latest` tag is also updated on release.
+            ### Manual download — platform archives
 
-            ### Cargo (Linux / macOS)
-
-            ```bash
-            cargo install codewhale-cli codewhale-tui --locked
-            ```
-
-            Both crates are required — `codewhale-cli` produces the `codewhale` dispatcher and `codewhale-tui` produces the interactive runtime that the dispatcher delegates to. Installing only one binary will fail at runtime with a `MISSING_COMPANION_BINARY` error.
-
-            ### Manual download — platform archives (recommended)
-
-            Each archive below contains **both** the `codewhale` dispatcher and `codewhale-tui` runtime, plus an install script:
+            Each archive contains **both** the `codewhale` dispatcher and `codewhale-tui` runtime, plus an install script:
 
             | Platform | Archive | Install script |
             |---|---|---|
@@ -558,46 +546,22 @@ jobs:
             ```
 
             **Windows:**
-            - For the installer path, run `CodeWhaleSetup.exe`; it installs both binaries under `%LOCALAPPDATA%\Programs\CodeWhale\bin` and adds that directory to the current-user PATH.
-            - Extract `codewhale-windows-x64.zip`
-            - Run `install.bat` (copies to `%USERPROFILE%\bin`)
-            - Add `%USERPROFILE%\bin` to your PATH
+            - Run `CodeWhaleSetup.exe` (installs to `%LOCALAPPDATA%\Programs\CodeWhale\bin`)
+            - Or extract `codewhale-windows-x64.zip`, run `install.bat`, add `%USERPROFILE%\bin` to PATH
 
-            The **portable** Windows archive skips the install script — extract and run from any directory. The NSIS installer is currently unsigned and may trigger Windows SmartScreen until a signing certificate is wired into the release pipeline.
-
-            Individual binaries are also attached below for scripting and the npm wrapper. The legacy npm package `deepseek-tui` is deprecated and is not republished. For migration from v0.8.x legacy binary names, see `docs/REBRAND.md`.
-
-            ### Verify (recommended)
-
-            Download the checksum manifests from this Release and verify:
+            ### Verify
 
             ```bash
-            # Linux — archive bundles
-            sha256sum -c codewhale-bundles-sha256.txt
-
-            # Linux — individual binaries
+            # Linux
             sha256sum -c codewhale-artifacts-sha256.txt
-
             # macOS
-            shasum -a 256 -c codewhale-bundles-sha256.txt
             shasum -a 256 -c codewhale-artifacts-sha256.txt
             ```
 
-            ## Contributors
+            ## Upstream
 
-            Thanks to @sximelon, @cyq1017, @Artenx, @LHqweasd, @wywsoor,
-            @hsdbeebou, @mserrano11, @Dr3259, @yekern, @lioryx,
-            @puneetdixit200, @HUQIANTAO, @xyuai, @gaord, @shenjackyuanjie,
-            @AdityaVG13, @aboimpinto, @ousamabenyounes, @reidliu41,
-            @ljm3790865, @idling11, @h3c-hexin, @AresNing, @tdccccc,
-            @qiyuanlicn, @bevis-wong, @shuxiangxuebiancheng, @hongqitai,
-            @NASLXTO, @wuxixing, @linzhiqin2003, @merchloubna70-dot,
-            @mvanhorn, @Implementist, @jrcjrcc, @punkcanyang,
-            @yusufgurdogan, @LeoAlex0, @mo-vic, @AiurArtanis, @nasus9527,
-            and @lbcheng888 for reports, PRs, reviews, reproductions,
-            design direction, and harvested work that shaped v0.9.0.
-
-            ## Changelog
+            Forked from [Hmbown/CodeWhale](https://github.com/Hmbown/CodeWhale) v0.8.53.
+            This release tracks upstream with a Claude Code‑style TUI presentation layer.
 
              See [CHANGELOG.md](https://github.com/unicornt/CodeWhale/blob/main/CHANGELOG.md) for the full notes for this release.
 

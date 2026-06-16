@@ -4,8 +4,7 @@
 # Build:  docker buildx build --platform linux/amd64,linux/arm64 -t codewhale:latest .
 # Run:    docker run --rm -it -e DEEPSEEK_API_KEY -v codewhale-home:/home/codewhale/.codewhale codewhale
 #
-# The image ships the canonical binaries (`codewhale`, `codewhale-tui`) plus
-# the legacy `deepseek` / `deepseek-tui` shims in a minimal runtime layer.
+# The image ships the `codewhale` and `codewhale-tui` binaries.
 #
 # API keys MUST be passed at runtime (never baked into the image):
 #   docker run --rm -it -e DEEPSEEK_API_KEY codewhale
@@ -62,9 +61,7 @@ RUN --mount=type=cache,id=codewhale-target-${TARGETARCH},target=/build/target,sh
       -p codewhale-cli -p codewhale-tui \
     && mkdir -p /out \
     && cp target/$(cat /rust-target)/release/codewhale /out/ \
-    && cp target/$(cat /rust-target)/release/codewhale-tui /out/ \
-    && cp target/$(cat /rust-target)/release/deepseek /out/ \
-    && cp target/$(cat /rust-target)/release/deepseek-tui /out/
+    && cp target/$(cat /rust-target)/release/codewhale-tui /out/
 
 # ── Stage 2: Runtime ──────────────────────────────────────────────────
 FROM debian:bookworm-slim
@@ -84,8 +81,6 @@ WORKDIR /home/codewhale
 
 COPY --from=builder --chown=codewhale:codewhale /out/codewhale /usr/local/bin/codewhale
 COPY --from=builder --chown=codewhale:codewhale /out/codewhale-tui /usr/local/bin/codewhale-tui
-COPY --from=builder --chown=codewhale:codewhale /out/deepseek /usr/local/bin/deepseek
-COPY --from=builder --chown=codewhale:codewhale /out/deepseek-tui /usr/local/bin/deepseek-tui
 
 # The dispatcher expects to find its companion binary next to it.
 # Both are in /usr/local/bin — no further path setup needed.
