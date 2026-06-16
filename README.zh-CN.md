@@ -27,6 +27,41 @@ session 信息，footer 左侧鲸鱼图标紧贴 `mode · model · cost · saved
 
 ![运行中——工具调用密集](docs/running_snapshot.png)
 
+第三张运行截图——使用全新的 **White Light** 主题：纯白底色，已完成的工具
+`[✓]`、模型输出圆点 `●`、cache hit 等强调色统一为 DeepSeek 蓝；完成的 thinking
+块和 tool 卡片自动折叠为一行 header，底部提示「Space to expand」可按空格展开。
+
+![运行中——White Light 主题](docs/running_snapshot3.png)
+
+---
+
+## 新增功能
+
+### White Light 主题
+
+新增 `white-light` 主题——纯白背景、浅灰层次、DeepSeek 蓝（`#487ED2`）作为
+强调色，替代其他浅色主题中的绿/青色调。通过以下命令切换：
+
+```
+/theme white-light
+```
+
+White Light 主题的关键配色：
+
+| 元素 | 颜色 | 色值 |
+|---|---|---|
+| 完成的 `[✓]` / success 状态 | DeepSeek 蓝 | `#487ED2` |
+| 模型输出圆点 `●` | DeepSeek 蓝 | `#487ED2` |
+| Cache-hit 显示 | DeepSeek 蓝 | `#487ED2` |
+| 高亮 cell 背景 | 浅绿底色 | `#E8F5E9` |
+| Diff 新增行 | DeepSeek 蓝 | `#487ED2` |
+
+### 完成的 cell 自动折叠
+
+已完成的 thinking 块和 tool 卡片现在会自动折叠为一行 header +「Space to expand」
+提示，让对话区聚焦在最新内容上。在折叠的 cell 上按 <kbd>空格</kbd>（输入框为空时）
+即可展开为完整内容。可通过 `/config auto_collapse_completed on|off` 开关。
+
 ---
 
 ## 这个 fork 是什么

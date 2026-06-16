@@ -79,7 +79,9 @@ pub const WHALE_TOOL_SURFACE_RGB: (u8, u8, u8) = (28, 40, 62); // #1C283E
 pub const WHALE_TOOL_ACTIVE_RGB: (u8, u8, u8) = (38, 54, 80); // #263650
 
 // Backward-compatible aliases for existing call sites.
-pub const DEEPSEEK_BLUE_RGB: (u8, u8, u8) = WHALE_ACCENT_PRIMARY_RGB;
+// DEEPSEEK_BLUE now maps to a readable deep blue that is visible on dark
+// backgrounds — brighter than the border colour, deeper than sky-blue.
+pub const DEEPSEEK_BLUE_RGB: (u8, u8, u8) = (72, 126, 210); // #487ED2
 pub const DEEPSEEK_SKY_RGB: (u8, u8, u8) = WHALE_INFO_RGB;
 pub const DEEPSEEK_INK_RGB: (u8, u8, u8) = WHALE_BG_RGB;
 pub const DEEPSEEK_SLATE_RGB: (u8, u8, u8) = WHALE_PANEL_RGB;
@@ -95,6 +97,18 @@ pub const LIGHT_TEXT_BODY_RGB: (u8, u8, u8) = (15, 23, 42); // #0F172A
 pub const LIGHT_TEXT_MUTED_RGB: (u8, u8, u8) = (51, 65, 85); // #334155
 pub const LIGHT_TEXT_HINT_RGB: (u8, u8, u8) = (100, 116, 139); // #64748B
 pub const LIGHT_TEXT_SOFT_RGB: (u8, u8, u8) = (30, 41, 59); // #1E293B
+
+// White Light palette RGB tuples — pure white bg, light-gray depth layers
+pub const WHITE_SURFACE_RGB: (u8, u8, u8) = (255, 255, 255); // #FFFFFF
+pub const WHITE_PANEL_RGB: (u8, u8, u8) = (247, 247, 248); // #F7F7F8
+pub const WHITE_ELEVATED_RGB: (u8, u8, u8) = (239, 239, 240); // #EFEFF0
+pub const WHITE_SELECTION_RGB: (u8, u8, u8) = (226, 226, 229); // #E2E2E5
+pub const WHITE_BORDER_RGB: (u8, u8, u8) = (212, 212, 216); // #D4D4D8
+pub const WHITE_TEXT_BODY_RGB: (u8, u8, u8) = (24, 24, 27); // #18181B
+pub const WHITE_TEXT_SOFT_RGB: (u8, u8, u8) = (63, 63, 70); // #3F3F46
+pub const WHITE_TEXT_MUTED_RGB: (u8, u8, u8) = (82, 82, 90); // #52525A
+pub const WHITE_TEXT_HINT_RGB: (u8, u8, u8) = (136, 136, 148); // #888894
+pub const WHITE_TEXT_DIM_RGB: (u8, u8, u8) = (160, 160, 168); // #A0A0A8
 
 // Solarized Light palette colors
 pub const SOLARIZED_TEXT_DIM: Color = Color::Rgb(
@@ -1195,6 +1209,115 @@ pub const CLAUDE_LIGHT_UI_THEME: UiTheme = UiTheme {
     tool_failed: Color::Rgb(0xb8, 0x3a, 0x3a),
 };
 
+pub const WHITE_LIGHT_UI_THEME: UiTheme = UiTheme {
+    name: "white-light",
+    mode: PaletteMode::Light,
+    // Pure white surface, light-gray depth layers — emphasis through text
+    // contrast instead of background darkening.
+    surface_bg: Color::Rgb(
+        WHITE_SURFACE_RGB.0,
+        WHITE_SURFACE_RGB.1,
+        WHITE_SURFACE_RGB.2,
+    ),
+    panel_bg: Color::Rgb(
+        WHITE_PANEL_RGB.0,
+        WHITE_PANEL_RGB.1,
+        WHITE_PANEL_RGB.2,
+    ),
+    elevated_bg: Color::Rgb(0xe8, 0xf5, 0xe9),
+    composer_bg: Color::Rgb(
+        WHITE_PANEL_RGB.0,
+        WHITE_PANEL_RGB.1,
+        WHITE_PANEL_RGB.2,
+    ),
+    selection_bg: Color::Rgb(
+        WHITE_SELECTION_RGB.0,
+        WHITE_SELECTION_RGB.1,
+        WHITE_SELECTION_RGB.2,
+    ),
+    header_bg: Color::Rgb(
+        WHITE_SURFACE_RGB.0,
+        WHITE_SURFACE_RGB.1,
+        WHITE_SURFACE_RGB.2,
+    ),
+    footer_bg: Color::Rgb(
+        WHITE_SURFACE_RGB.0,
+        WHITE_SURFACE_RGB.1,
+        WHITE_SURFACE_RGB.2,
+    ),
+    // Text hierarchy — darker text = more emphasis (no dark backgrounds)
+    text_dim: Color::Rgb(
+        WHITE_TEXT_DIM_RGB.0,
+        WHITE_TEXT_DIM_RGB.1,
+        WHITE_TEXT_DIM_RGB.2,
+    ),
+    text_hint: Color::Rgb(
+        WHITE_TEXT_HINT_RGB.0,
+        WHITE_TEXT_HINT_RGB.1,
+        WHITE_TEXT_HINT_RGB.2,
+    ),
+    text_muted: Color::Rgb(
+        WHITE_TEXT_MUTED_RGB.0,
+        WHITE_TEXT_MUTED_RGB.1,
+        WHITE_TEXT_MUTED_RGB.2,
+    ),
+    text_body: Color::Rgb(
+        WHITE_TEXT_BODY_RGB.0,
+        WHITE_TEXT_BODY_RGB.1,
+        WHITE_TEXT_BODY_RGB.2,
+    ),
+    text_soft: Color::Rgb(
+        WHITE_TEXT_SOFT_RGB.0,
+        WHITE_TEXT_SOFT_RGB.1,
+        WHITE_TEXT_SOFT_RGB.2,
+    ),
+    border: Color::Rgb(
+        WHITE_BORDER_RGB.0,
+        WHITE_BORDER_RGB.1,
+        WHITE_BORDER_RGB.2,
+    ),
+    // Coral primary, muted teal secondary (derived from Claude Light)
+    accent_primary: Color::Rgb(0xcc, 0x78, 0x5c),
+    accent_secondary: Color::Rgb(0x6f, 0x9b, 0x8e),
+    accent_action: Color::Rgb(0xd9, 0x96, 0x4a),
+    // Error / destructive — light-tinted surfaces, not dark boxes
+    error_fg: Color::Rgb(0xb8, 0x3a, 0x3a),
+    error_hover: Color::Rgb(0xc4, 0x55, 0x55),
+    error_surface: Color::Rgb(0xfc, 0xe8, 0xe8),
+    error_border: Color::Rgb(0xb8, 0x3a, 0x3a),
+    error_text: Color::Rgb(0x6b, 0x1c, 0x1c),
+    // Status
+    warning: Color::Rgb(0xb0, 0x7a, 0x10),
+    success: Color::Rgb(0x48, 0x7e, 0xd2),
+    info: Color::Rgb(0xcc, 0x78, 0x5c),
+    // Mode badges
+    mode_agent: Color::Rgb(0xcc, 0x78, 0x5c),
+    mode_yolo: Color::Rgb(0xb8, 0x3a, 0x3a),
+    mode_plan: Color::Rgb(0xd9, 0x96, 0x4a),
+    mode_goal: Color::Rgb(0x48, 0x7e, 0xd2),
+    // Footer statusline
+    status_ready: Color::Rgb(
+        WHITE_TEXT_HINT_RGB.0,
+        WHITE_TEXT_HINT_RGB.1,
+        WHITE_TEXT_HINT_RGB.2,
+    ),
+    status_working: Color::Rgb(0x48, 0x7e, 0xd2),
+    status_warning: Color::Rgb(0xb0, 0x7a, 0x10),
+    // Diff — light tinted backgrounds
+    diff_added_fg: Color::Rgb(0x48, 0x7e, 0xd2),
+    diff_deleted_fg: Color::Rgb(0xb8, 0x3a, 0x3a),
+    diff_added_bg: Color::Rgb(0xe8, 0xf5, 0xe9),
+    diff_deleted_bg: Color::Rgb(0xfc, 0xe8, 0xe8),
+    // Tool cells
+    tool_running: Color::Rgb(0x6f, 0x9b, 0x8e),
+    tool_success: Color::Rgb(
+        WHITE_TEXT_HINT_RGB.0,
+        WHITE_TEXT_HINT_RGB.1,
+        WHITE_TEXT_HINT_RGB.2,
+    ),
+    tool_failed: Color::Rgb(0xb8, 0x3a, 0x3a),
+};
+
 pub const MATRIX_UI_THEME: UiTheme = UiTheme {
     name: "matrix",
     mode: PaletteMode::Dark,
@@ -1314,6 +1437,7 @@ pub enum ThemeId {
     GruvboxDark,
     Claude,
     ClaudeLight,
+    WhiteLight,
     Matrix,
     SolarizedLight,
 }
@@ -1336,6 +1460,7 @@ impl ThemeId {
             "gruvbox-dark" => Some(Self::GruvboxDark),
             "claude" => Some(Self::Claude),
             "claude-light" => Some(Self::ClaudeLight),
+            "white-light" | "white" => Some(Self::WhiteLight),
             "matrix" => Some(Self::Matrix),
             "solarized-light" => Some(Self::SolarizedLight),
             _ => None,
@@ -1358,6 +1483,7 @@ impl ThemeId {
             Self::GruvboxDark => "gruvbox-dark",
             Self::Claude => "claude",
             Self::ClaudeLight => "claude-light",
+            Self::WhiteLight => "white-light",
             Self::Matrix => "matrix",
             Self::SolarizedLight => "solarized-light",
         }
@@ -1378,6 +1504,7 @@ impl ThemeId {
             Self::GruvboxDark => "Gruvbox Dark",
             Self::Claude => "Claude",
             Self::ClaudeLight => "Claude Light",
+            Self::WhiteLight => "White Light",
             Self::Matrix => "Matrix",
             Self::SolarizedLight => "Solarized Light",
         }
@@ -1398,6 +1525,7 @@ impl ThemeId {
             Self::GruvboxDark => "Vintage warm earth tones",
             Self::Claude => "Warm navy & coral",
             Self::ClaudeLight => "Cream paper & coral — Claude.ai light",
+            Self::WhiteLight => "Pure white background, light-gray depth, text-driven emphasis",
             Self::Matrix => "The Matrix films inspired theme",
             Self::SolarizedLight => {
                 "Solarized light — Light, calming palette on warm ivory — easy on the eyes"
@@ -1423,6 +1551,7 @@ impl ThemeId {
             Self::GruvboxDark => GRUVBOX_DARK_UI_THEME,
             Self::Claude => CLAUDE_UI_THEME,
             Self::ClaudeLight => CLAUDE_LIGHT_UI_THEME,
+            Self::WhiteLight => WHITE_LIGHT_UI_THEME,
             Self::Matrix => MATRIX_UI_THEME,
             Self::SolarizedLight => SOLARIZED_LIGHT_UI_THEME,
         }
@@ -1442,6 +1571,7 @@ pub const SELECTABLE_THEMES: &[ThemeId] = &[
     ThemeId::GruvboxDark,
     ThemeId::Claude,
     ThemeId::ClaudeLight,
+    ThemeId::WhiteLight,
     ThemeId::Matrix,
     ThemeId::SolarizedLight,
 ];
@@ -1491,6 +1621,7 @@ pub fn normalize_theme_name(value: &str) -> Option<&'static str> {
         "gruvbox-dark" | "gruvbox" => Some("gruvbox-dark"),
         "claude" => Some("claude"),
         "claude-light" | "claudelight" | "claude_light" => Some("claude-light"),
+        "white-light" | "white" => Some("white-light"),
         "matrix" | "hacker" => Some("matrix"),
         "solarized-light" | "solarized" => Some("solarized-light"),
         _ => None,
@@ -1725,6 +1856,7 @@ pub const fn theme_remap_active(theme: ThemeId) -> bool {
             | ThemeId::GruvboxDark
             | ThemeId::Claude
             | ThemeId::ClaudeLight
+            | ThemeId::WhiteLight
             | ThemeId::Matrix
             | ThemeId::SolarizedLight
     )
@@ -1762,6 +1894,8 @@ pub fn adapt_fg_for_theme(color: Color, theme: ThemeId, ui: &UiTheme) -> Color {
     } else if color == TEXT_REASONING || color == ACCENT_REASONING_LIVE {
         if theme == ThemeId::Matrix {
             Color::Rgb(0x00, 0x55, 0x00) // #005500
+        } else if theme == ThemeId::WhiteLight {
+            Color::Rgb(0x88, 0x88, 0x94) // medium gray thinking text
         } else {
             ui.mode_plan
         }
@@ -1769,12 +1903,22 @@ pub fn adapt_fg_for_theme(color: Color, theme: ThemeId, ui: &UiTheme) -> Color {
         ui.mode_yolo
     } else if color == STATUS_WARNING {
         ui.warning
+    } else if color == STATUS_SUCCESS {
+        ui.success
     } else if color == STATUS_ERROR || color == DEEPSEEK_RED {
         ui.error_fg
     } else if color == DIFF_ADDED || color == USER_BODY || color == LIGHT_USER_BODY {
-        theme_green(ui)
+        if theme == ThemeId::WhiteLight && (color == USER_BODY || color == LIGHT_USER_BODY) {
+            Color::Rgb(0x18, 0x18, 0x1b) // black user input text
+        } else {
+            theme_green(ui)
+        }
     } else if color == DEEPSEEK_BLUE {
-        ui.mode_agent
+        if theme == ThemeId::WhiteLight {
+            color // keep #487ED2 for WhiteLight brand blue
+        } else {
+            ui.mode_agent // community themes remap to their accent
+        }
     } else {
         color
     }

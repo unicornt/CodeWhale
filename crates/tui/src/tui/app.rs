@@ -1378,6 +1378,10 @@ pub struct App {
     pub show_thinking: bool,
     pub verbose_transcript: bool,
     pub show_tool_details: bool,
+    /// Auto-collapse completed thinking blocks and tool cards to a 1-line
+    /// header. Cells stream expanded, then collapse on completion; Space
+    /// expands via `user_expanded_cells`.
+    pub auto_collapse_completed: bool,
     pub ui_locale: Locale,
     pub cost_currency: CostCurrency,
     pub composer_density: ComposerDensity,
@@ -1706,6 +1710,11 @@ pub struct App {
     /// content). Stores **original** virtual cell indices. Toggled by Space
     /// when the composer is empty and the cursor is on a thinking cell.
     pub folded_thinking: HashSet<usize>,
+    /// Cells the user has manually expanded out of the auto-collapse state.
+    /// Stores **original** virtual cell indices (history idx, or
+    /// `history.len()+offset` for active_cell entries). Space toggles when the
+    /// cursor is on a completed thinking/tool cell. Cleared by `flush_active_cell`.
+    pub user_expanded_cells: HashSet<usize>,
     /// Mapping from filtered cell index → original virtual index.
     /// Populated during `ChatWidget::new` by filtering out collapsed cells.
     /// Used by `build_context_menu_entries` to convert line-meta indices
@@ -1923,6 +1932,7 @@ impl App {
         let status_indicator = settings.status_indicator.clone();
         let show_thinking = settings.show_thinking;
         let show_tool_details = settings.show_tool_details;
+        let auto_collapse_completed = settings.auto_collapse_completed;
         let ui_locale = resolve_locale(&settings.locale);
         let cost_currency = match (settings.cost_currency.as_str(), ui_locale.tag()) {
             ("usd", "zh-Hans") => CostCurrency::Cny,
@@ -2143,6 +2153,7 @@ impl App {
             show_thinking,
             verbose_transcript: false,
             show_tool_details,
+            auto_collapse_completed,
             ui_locale,
             cost_currency,
             composer_density,
@@ -2291,6 +2302,7 @@ impl App {
             last_pinned_prefix_hash: None,
             collapsed_cells: HashSet::new(),
             folded_thinking: HashSet::new(),
+            user_expanded_cells: HashSet::new(),
             collapsed_cell_map: Vec::new(),
             edit_in_progress: false,
             lsp_enabled: config.lsp.as_ref().and_then(|l| l.enabled).unwrap_or(true),
@@ -2730,6 +2742,17 @@ impl App {
             .into_iter()
             .filter_map(|idx| if idx >= n { Some(idx - n) } else { None })
             .collect();
+        // Per-cell fold/expand overrides — original virtual indices, same
+        // rebasing as collapsed_cells. folded_thinking was historically not
+        // maintained here (bug); user_expanded_cells is new.
+        self.folded_thinking = std::mem::take(&mut self.folded_thinking)
+            .into_iter()
+            .filter_map(|idx| if idx >= n { Some(idx - n) } else { None })
+            .collect();
+        self.user_expanded_cells = std::mem::take(&mut self.user_expanded_cells)
+            .into_iter()
+            .filter_map(|idx| if idx >= n { Some(idx - n) } else { None })
+            .collect();
         self.collapsed_cell_map.clear();
     }
 
@@ -2825,6 +2848,8 @@ impl App {
         self.session_artifacts.clear();
         self.collapsed_cells.clear();
         self.expanded_tool_runs.clear();
+        self.folded_thinking.clear();
+        self.user_expanded_cells.clear();
         self.collapsed_cell_map.clear();
         self.history_version = self.history_version.wrapping_add(1);
         self.needs_redraw = true;
@@ -2838,6 +2863,9 @@ impl App {
             self.context_references_by_cell.remove(&self.history.len());
             self.rebuild_session_context_references();
             self.expanded_tool_runs
+                .retain(|idx| *idx < self.history.len());
+            self.folded_thinking.retain(|idx| *idx < self.history.len());
+            self.user_expanded_cells
                 .retain(|idx| *idx < self.history.len());
             self.history_version = self.history_version.wrapping_add(1);
             self.needs_redraw = true;
@@ -2877,6 +2905,8 @@ impl App {
         // Drop collapsed cells that reference indices past the new tail.
         self.collapsed_cells.retain(|idx| *idx < new_len);
         self.expanded_tool_runs.retain(|idx| *idx < new_len);
+        self.folded_thinking.retain(|idx| *idx < new_len);
+        self.user_expanded_cells.retain(|idx| *idx < new_len);
         self.collapsed_cell_map.clear();
         self.history_version = self.history_version.wrapping_add(1);
         self.needs_redraw = true;
@@ -3155,6 +3185,11 @@ impl App {
             self.history_revisions.push(rev);
         }
         self.history_version = self.history_version.wrapping_add(1);
+        // Clear per-cell fold/expand overrides — they used active-cell virtual
+        // indices which no longer apply now that entries are in history. Users
+        // can re-expand any completed cell with Space.
+        self.folded_thinking.clear();
+        self.user_expanded_cells.clear();
         self.needs_redraw = true;
         let selection_has_range = self
             .viewport
@@ -3443,6 +3478,7 @@ impl App {
             show_thinking: self.show_thinking,
             verbose: self.verbose_transcript,
             show_tool_details: self.show_tool_details,
+            auto_collapse_completed: self.auto_collapse_completed,
             calm_mode: self.calm_mode,
             low_motion: self.low_motion,
             spacing: self.transcript_spacing,

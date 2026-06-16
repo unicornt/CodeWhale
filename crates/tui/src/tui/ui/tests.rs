@@ -520,6 +520,7 @@ fn selection_to_text_strips_list_continuation_prefixes() {
 #[test]
 fn selection_to_text_copies_rendered_transcript_block() {
     let mut app = create_test_app();
+    app.auto_collapse_completed = false;
     app.history = vec![
         HistoryCell::System {
             content: "copy system".to_string(),
@@ -5479,6 +5480,7 @@ fn open_tool_details_pager_supports_active_virtual_tool_cell() {
         100,
         app.transcript_render_options(),
         &app.folded_thinking,
+        &app.user_expanded_cells,
         None,
     );
     app.viewport.last_transcript_top = 0;

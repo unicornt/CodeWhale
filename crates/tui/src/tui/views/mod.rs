@@ -728,6 +728,13 @@ impl ConfigView {
             },
             ConfigRow {
                 section: ConfigSection::Display,
+                key: "auto_collapse_completed".to_string(),
+                value: settings.auto_collapse_completed.to_string(),
+                editable: true,
+                scope: ConfigScope::Saved,
+            },
+            ConfigRow {
+                section: ConfigSection::Display,
                 key: "status_indicator".to_string(),
                 value: settings.status_indicator.clone(),
                 editable: true,
@@ -1257,6 +1264,7 @@ fn config_hint_for_key(key: &str) -> &'static str {
         | "low_motion"
         | "show_thinking"
         | "show_tool_details"
+        | "auto_collapse_completed"
         | "composer_border"
         | "paste_burst_detection" => "on/off, true/false, yes/no, 1/0",
         "composer_density" | "transcript_spacing" => "compact | comfortable | spacious",

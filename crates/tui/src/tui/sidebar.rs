@@ -782,7 +782,7 @@ fn task_panel_lines(app: &App, content_width: usize, max_rows: usize) -> Vec<Lin
                 &format!("turn {turn_prefix} ({status})",),
                 content_width.max(1),
             ),
-            Style::default().fg(theme.accent_primary),
+            Style::default().fg(palette::DEEPSEEK_BLUE),
         )));
     }
 
@@ -808,7 +808,7 @@ fn task_panel_lines(app: &App, content_width: usize, max_rows: usize) -> Vec<Lin
         };
         lines.push(Line::from(Span::styled(
             label,
-            Style::default().fg(theme.accent_primary).bold(),
+            Style::default().fg(palette::DEEPSEEK_BLUE).bold(),
         )));
 
         let max_items = max_rows.saturating_sub(lines.len());
@@ -969,10 +969,10 @@ fn task_panel_hover_texts(app: &App, max_rows: usize) -> Vec<String> {
     texts
 }
 
-fn push_sidebar_label_theme(lines: &mut Vec<Line<'static>>, label: &str, theme: &palette::UiTheme) {
+fn push_sidebar_label_theme(lines: &mut Vec<Line<'static>>, label: &str, _theme: &palette::UiTheme) {
     lines.push(Line::from(Span::styled(
         label.to_string(),
-        Style::default().fg(theme.accent_primary).bold(),
+        Style::default().fg(palette::DEEPSEEK_BLUE).bold(),
     )));
 }
 
@@ -1920,7 +1920,7 @@ pub fn subagent_panel_lines(
         vec![
             Span::styled(
                 format!("{live_running} running"),
-                Style::default().fg(theme.accent_primary).bold(),
+                Style::default().fg(palette::DEEPSEEK_BLUE).bold(),
             ),
             Span::styled(format!(" / {total}"), Style::default().fg(theme.text_muted)),
         ]
@@ -1995,7 +1995,7 @@ pub fn subagent_panel_lines(
 
     if summary.foreground_rlm_running {
         lines.push(Line::from(vec![
-            Span::styled("RLM", Style::default().fg(theme.accent_primary).bold()),
+            Span::styled("RLM", Style::default().fg(palette::DEEPSEEK_BLUE).bold()),
             Span::styled(
                 " foreground work active",
                 Style::default().fg(theme.text_dim),
@@ -2125,7 +2125,7 @@ fn render_context_panel(f: &mut Frame, area: Rect, app: &mut App) {
     lines.push(Line::from(vec![
         Span::styled(
             truncate_line_to_width(&ws_name, content_width.max(1)),
-            Style::default().fg(theme.accent_primary).bold(),
+            Style::default().fg(palette::DEEPSEEK_BLUE).bold(),
         ),
         Span::styled(
             format!("  {}", app.workspace_context.as_deref().unwrap_or("")),

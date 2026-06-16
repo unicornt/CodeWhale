@@ -156,11 +156,24 @@ impl SubAgentCell {
     }
 }
 
+/// Per-cell fold/expand overrides packed into a single struct so callers
+/// construct them once and the render branch guards stay lean.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct FoldOverrides {
+    /// Legacy per-thinking-cell fold bit (from `folded_thinking` / verbose XOR).
+    pub thinking_folded: bool,
+    /// Per-cell user-expand override (from `user_expanded_cells`).
+    /// `true` means the user has explicitly expanded this cell, forcing full
+    /// rendering regardless of auto-collapse or thinking-fold state.
+    pub user_expanded: bool,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TranscriptRenderOptions {
     pub show_thinking: bool,
     pub verbose: bool,
     pub show_tool_details: bool,
+    pub auto_collapse_completed: bool,
     pub calm_mode: bool,
     pub low_motion: bool,
     pub spacing: TranscriptSpacing,
@@ -178,6 +191,7 @@ impl Default for TranscriptRenderOptions {
             show_thinking: true,
             verbose: false,
             show_tool_details: true,
+            auto_collapse_completed: true,
             calm_mode: false,
             low_motion: false,
             spacing: TranscriptSpacing::Comfortable,
@@ -257,7 +271,7 @@ impl HistoryCell {
         width: u16,
         options: TranscriptRenderOptions,
     ) -> Vec<Line<'static>> {
-        self.lines_with_options_folded(width, options, false)
+        self.lines_with_options_folded(width, options, FoldOverrides::default())
     }
 
     /// Render with an explicit per-cell fold override for thinking cells.
@@ -270,9 +284,11 @@ impl HistoryCell {
         &self,
         width: u16,
         options: TranscriptRenderOptions,
-        folded: bool,
+        overrides: FoldOverrides,
     ) -> Vec<Line<'static>> {
+        let o = overrides;
         match self {
+            // Branch 1: hidden thinking (unchanged)
             HistoryCell::Thinking {
                 streaming,
                 duration_secs,
@@ -284,18 +300,60 @@ impl HistoryCell {
                     Vec::new()
                 }
             }
+            // Branch 2: auto-collapse completed thinking → 1-line header + affordance
+            // Warm amber (`TEXT_REASONING`) on the opener distinguishes folded reasoning
+            // from folded tool cards at a glance.
+            HistoryCell::Thinking {
+                content: _,
+                streaming: false,
+                duration_secs,
+            } if options.auto_collapse_completed && !o.user_expanded => {
+                let state = thinking_visual_state(false, *duration_secs);
+                let mut header_spans = vec![
+                    Span::styled(
+                        format!("{REASONING_OPENER} "),
+                        Style::default().fg(palette::TEXT_REASONING),
+                    ),
+                    Span::styled("thinking", thinking_title_style()),
+                    Span::styled(" ", Style::default()),
+                    Span::styled(thinking_status_label(state), thinking_status_style(state)),
+                ];
+                if let Some(dur) = duration_secs {
+                    header_spans.push(Span::styled(" · ", Style::default().fg(palette::TEXT_DIM)));
+                    header_spans.push(Span::styled(
+                        format!("{dur:.1}s"),
+                        thinking_meta_style(),
+                    ));
+                }
+                let mut lines = vec![Line::from(header_spans)];
+                lines.push(details_affordance_line(
+                    "Space to expand",
+                    Style::default().fg(palette::TEXT_MUTED).italic(),
+                ));
+                lines
+            }
+            // Branch 3: all other thinking → existing render_thinking
+            // user_expanded forces collapsed=false (full body, not summary)
             HistoryCell::Thinking {
                 content,
                 streaming,
                 duration_secs,
-            } => render_thinking(
-                content,
-                width,
-                *streaming,
-                *duration_secs,
-                folded ^ !options.verbose,
-                options.low_motion,
-            ),
+            } => {
+                let collapsed = if o.user_expanded {
+                    false
+                } else {
+                    o.thinking_folded ^ !options.verbose
+                };
+                render_thinking(
+                    content,
+                    width,
+                    *streaming,
+                    *duration_secs,
+                    collapsed,
+                    options.low_motion,
+                )
+            }
+            // Branch 4: show_tool_details off → 2-line truncation (unchanged, takes priority)
             HistoryCell::Tool(cell) if !options.show_tool_details => {
                 let mut lines = cell.lines_with_motion(width, options.low_motion);
                 if lines.len() > 2 {
@@ -307,6 +365,7 @@ impl HistoryCell {
                 }
                 lines
             }
+            // Branch 5: calm_mode → 4-line truncation (unchanged, takes priority)
             HistoryCell::Tool(cell) if options.calm_mode => {
                 let mut lines = cell.lines_with_motion(width, options.low_motion);
                 if lines.len() > TOOL_CARD_SUMMARY_LINES {
@@ -318,7 +377,26 @@ impl HistoryCell {
                 }
                 lines
             }
+            // Branch 6: auto-collapse completed tool → 1-line header + affordance
+            // Tint the status symbol and tool-glyph spans with cool blue
+            // (`DEEPSEEK_SKY`) so folded tool cards read as "executed" rather
+            // than "greyed-out", and stay visually distinct from reasoning.
+            HistoryCell::Tool(cell)
+                if options.auto_collapse_completed
+                    && !o.user_expanded
+                    && cell.status() != Some(ToolStatus::Running) =>
+            {
+                let header = cell.header_only_line(options.low_motion);
+                let mut lines = vec![tint_folded_tool_header(header)];
+                lines.push(details_affordance_line(
+                    "Space to expand",
+                    Style::default().fg(palette::TEXT_MUTED).italic(),
+                ));
+                lines
+            }
+            // Branch 7: all other tool → full rendering (unchanged)
             HistoryCell::Tool(cell) => cell.lines_with_motion(width, options.low_motion),
+            // Non-collapsible cells (unchanged)
             HistoryCell::User { content } => render_user_message(content, width),
             HistoryCell::Assistant { content, streaming } => render_message(
                 ASSISTANT_GLYPH,
@@ -341,14 +419,14 @@ impl HistoryCell {
         width: u16,
         options: TranscriptRenderOptions,
     ) -> Vec<RenderedTranscriptLine> {
-        self.lines_with_copy_metadata_folded(width, options, false)
+        self.lines_with_copy_metadata_folded(width, options, FoldOverrides::default())
     }
 
     pub(crate) fn lines_with_copy_metadata_folded(
         &self,
         width: u16,
         options: TranscriptRenderOptions,
-        folded: bool,
+        overrides: FoldOverrides,
     ) -> Vec<RenderedTranscriptLine> {
         match self {
             HistoryCell::User { content } => {
@@ -370,7 +448,7 @@ impl HistoryCell {
                     width,
                 )
             }
-            _ => hard_break_copy_lines(self.lines_with_options_folded(width, options, folded)),
+            _ => hard_break_copy_lines(self.lines_with_options_folded(width, options, overrides)),
         }
     }
 
@@ -767,6 +845,25 @@ impl ToolCell {
         self.render(width, /*low_motion*/ false, RenderMode::Transcript)
     }
 
+    /// Render only the header line for this tool cell — used by the
+    /// auto-collapse path to show a 1-line summary when the tool is complete.
+    /// Each variant reuses exactly the same header construction as its
+    /// `lines_with_motion` / `render` method, without the body.
+    pub fn header_only_line(&self, low_motion: bool) -> Line<'static> {
+        match self {
+            ToolCell::Exec(cell) => cell.header_only_line(low_motion),
+            ToolCell::Exploring(cell) => cell.header_only_line(low_motion),
+            ToolCell::PlanUpdate(cell) => cell.header_only_line(low_motion),
+            ToolCell::PatchSummary(cell) => cell.header_only_line(low_motion),
+            ToolCell::Review(cell) => cell.header_only_line(low_motion),
+            ToolCell::DiffPreview(cell) => cell.header_only_line(low_motion),
+            ToolCell::Mcp(cell) => cell.header_only_line(low_motion),
+            ToolCell::ViewImage(cell) => cell.header_only_line(low_motion),
+            ToolCell::WebSearch(cell) => cell.header_only_line(low_motion),
+            ToolCell::Generic(cell) => cell.header_only_line(low_motion),
+        }
+    }
+
     fn render(&self, width: u16, low_motion: bool, mode: RenderMode) -> Vec<Line<'static>> {
         match self {
             ToolCell::Exec(cell) => cell.render(width, low_motion, mode),
@@ -987,6 +1084,22 @@ impl ExecCell {
 
         wrap_card_rail(lines)
     }
+
+    pub(super) fn header_only_line(&self, low_motion: bool) -> Line<'static> {
+        let command_summary = command_header_summary(&self.command);
+        let header_summary = self
+            .interaction
+            .as_deref()
+            .or(Some(command_summary.as_str()));
+        render_tool_header_with_summary(
+            "Shell",
+            header_summary,
+            tool_status_label(self.status),
+            self.status,
+            self.started_at,
+            low_motion,
+        )
+    }
 }
 
 /// Source of a shell command execution.
@@ -1054,6 +1167,31 @@ impl ExploringCell {
         lines
     }
 
+    pub(super) fn header_only_line(&self, low_motion: bool) -> Line<'static> {
+        let all_done = self
+            .entries
+            .iter()
+            .all(|entry| entry.status != ToolStatus::Running);
+        let any_hydrated = self
+            .entries
+            .iter()
+            .any(|entry| entry.status == ToolStatus::Hydrated);
+        let status = if all_done {
+            if any_hydrated { ToolStatus::Hydrated } else { ToolStatus::Success }
+        } else {
+            ToolStatus::Running
+        };
+        let header_summary = exploring_header_summary(&self.entries);
+        render_tool_header_with_summary(
+            "Workspace",
+            header_summary.as_deref(),
+            if all_done { tool_status_label(status) } else { "running" },
+            status,
+            None,
+            low_motion,
+        )
+    }
+
     /// Insert a new entry and return its index.
     #[must_use]
     pub fn insert_entry(&mut self, entry: ExploringEntry) -> usize {
@@ -1091,6 +1229,16 @@ impl PlanUpdateCell {
         render_plan_snapshot_lines(&self.snapshot, &mut lines, width);
 
         lines
+    }
+
+    pub(super) fn header_only_line(&self, low_motion: bool) -> Line<'static> {
+        render_tool_header(
+            "Plan",
+            tool_status_label(self.status),
+            self.status,
+            None,
+            low_motion,
+        )
     }
 }
 
@@ -1198,6 +1346,17 @@ impl PatchSummaryCell {
             ));
         }
         lines
+    }
+
+    pub(super) fn header_only_line(&self, low_motion: bool) -> Line<'static> {
+        render_tool_header_with_summary(
+            "Patch",
+            Some(&self.path),
+            tool_status_label(self.status),
+            self.status,
+            None,
+            low_motion,
+        )
     }
 }
 
@@ -1335,6 +1494,16 @@ impl ReviewCell {
 
         lines
     }
+
+    pub(super) fn header_only_line(&self, low_motion: bool) -> Line<'static> {
+        render_tool_header(
+            "Review",
+            tool_status_label(self.status),
+            self.status,
+            None,
+            low_motion,
+        )
+    }
 }
 
 /// Cell for showing a diff preview before applying changes.
@@ -1364,6 +1533,18 @@ impl DiffPreviewCell {
         ));
         lines.extend(diff_render::render_diff(&self.diff, width));
         lines
+    }
+
+    pub(super) fn header_only_line(&self, low_motion: bool) -> Line<'static> {
+        let diff_summary = diff_render::diff_summary_label(&self.diff);
+        render_tool_header_with_summary(
+            "Diff",
+            diff_summary.as_deref(),
+            "done",
+            ToolStatus::Success,
+            None,
+            low_motion,
+        )
     }
 }
 
@@ -1418,6 +1599,17 @@ impl McpToolCell {
         }
         lines
     }
+
+    pub(super) fn header_only_line(&self, low_motion: bool) -> Line<'static> {
+        render_tool_header_with_summary(
+            "Tool",
+            Some(&self.tool),
+            tool_status_label(self.status),
+            self.status,
+            None,
+            low_motion,
+        )
+    }
 }
 
 /// Cell for image view actions.
@@ -1440,6 +1632,18 @@ impl ViewImageCell {
         )];
         lines.extend(render_compact_kv("path", &path, tool_value_style(), width));
         lines
+    }
+
+    pub(super) fn header_only_line(&self, low_motion: bool) -> Line<'static> {
+        let path = self.path.display().to_string();
+        render_tool_header_with_summary(
+            "Image",
+            Some(&path),
+            "done",
+            ToolStatus::Success,
+            None,
+            low_motion,
+        )
     }
 }
 
@@ -1478,6 +1682,17 @@ impl WebSearchCell {
             ));
         }
         lines
+    }
+
+    pub(super) fn header_only_line(&self, low_motion: bool) -> Line<'static> {
+        render_tool_header_with_summary(
+            "Search",
+            Some(&self.query),
+            tool_status_label(self.status),
+            self.status,
+            None,
+            low_motion,
+        )
     }
 }
 
@@ -1704,6 +1919,39 @@ impl GenericToolCell {
             low_motion,
             mode,
         ))
+    }
+
+    pub(super) fn header_only_line(&self, low_motion: bool) -> Line<'static> {
+        // Match the compact agent_open path in lines_with_mode.
+        if matches!(self.name.as_str(), "agent_open" | "agent_spawn") {
+            let family = crate::tui::widgets::tool_card::ToolFamily::Delegate;
+            let agent_id = self
+                .output
+                .as_deref()
+                .and_then(extract_agent_id)
+                .unwrap_or("…");
+            return render_tool_header_with_family_and_summary(
+                family,
+                Some(agent_id),
+                tool_status_label(self.status),
+                self.status,
+                None,
+                low_motion,
+            );
+        }
+        let family = crate::tui::widgets::tool_card::tool_family_for_name(&self.name);
+        let header_summary = crate::tui::widgets::tool_card::tool_header_summary_for_name(
+            &self.name,
+            self.input_summary.as_deref(),
+        );
+        render_tool_header_with_family_and_summary(
+            family,
+            header_summary.as_deref(),
+            tool_status_label(self.status),
+            self.status,
+            None,
+            low_motion,
+        )
     }
 }
 
@@ -3248,7 +3496,7 @@ fn truncate_text(text: &str, max_len: usize) -> String {
 }
 
 fn user_label_style() -> Style {
-    Style::default().fg(palette::USER_BODY)
+    Style::default().fg(palette::DEEPSEEK_BLUE)
 }
 
 fn user_body_style() -> Style {
@@ -3408,6 +3656,25 @@ fn render_tool_header_with_family_and_summary(
     }
 
     Line::from(spans)
+}
+
+/// Tint the first two spans (status symbol + tool-family glyph) of a
+/// folded tool header with cool blue (`DEEPSEEK_SKY`) so completed tool
+/// cards remain visually distinct from reasoning cards in the 1-line
+/// auto-collapse strip.
+fn tint_folded_tool_header(mut line: Line<'static>) -> Line<'static> {
+    // Span 0: status symbol (e.g. "◉ ")
+    // Span 1: tool-family glyph (e.g. "▷ ")
+    // Both default to `tool_state_color(status)` which maps Success → TEXT_DIM.
+    // Replace dim grey with a subtle blue that signals "executed, not greyed."
+    for idx in [0, 1] {
+        if let Some(span) = line.spans.get_mut(idx)
+            && span.style.fg == Some(palette::TEXT_DIM)
+        {
+            span.style = span.style.fg(palette::DEEPSEEK_SKY);
+        }
+    }
+    line
 }
 
 fn normalize_header_summary(summary: &str) -> Option<String> {
@@ -3689,11 +3956,11 @@ fn looks_like_file_path(s: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        ASSISTANT_GLYPH, ExecCell, ExecSource, GenericToolCell, HistoryCell, PlanUpdateCell,
-        REASONING_CURSOR, REASONING_OPENER, REASONING_RAIL, TOOL_RUNNING_SYMBOLS,
-        TOOL_STATUS_SYMBOL_MS, ToolCell, ToolStatus, TranscriptRenderOptions, USER_GLYPH,
-        assistant_label_style_for, extract_reasoning_summary, render_thinking,
-        running_status_label_with_elapsed,
+        ASSISTANT_GLYPH, ExecCell, ExecSource, FoldOverrides, GenericToolCell, HistoryCell,
+        PlanUpdateCell, REASONING_CURSOR, REASONING_OPENER, REASONING_RAIL,
+        TOOL_RUNNING_SYMBOLS, TOOL_STATUS_SYMBOL_MS, ToolCell, ToolStatus,
+        TranscriptRenderOptions, USER_GLYPH, assistant_label_style_for,
+        extract_reasoning_summary, render_thinking, running_status_label_with_elapsed,
     };
     use crate::deepseek_theme::Theme;
     use crate::models::{ContentBlock, Message};
@@ -4396,7 +4663,7 @@ mod tests {
         let lines = cell.lines(80);
         let head = &lines[0];
         assert_eq!(head.spans[0].content.as_ref(), USER_GLYPH);
-        assert_eq!(head.spans[0].style.fg, Some(palette::USER_BODY));
+        assert_eq!(head.spans[0].style.fg, Some(palette::DEEPSEEK_BLUE));
         assert_eq!(head.style.bg, Some(palette::SURFACE_ELEVATED));
         assert_eq!(head.width(), 80);
         assert!(
@@ -5174,6 +5441,7 @@ mod tests {
             80,
             TranscriptRenderOptions {
                 low_motion: true,
+                auto_collapse_completed: false,
                 ..TranscriptRenderOptions::default()
             },
         );
@@ -5230,6 +5498,7 @@ mod tests {
             80,
             TranscriptRenderOptions {
                 low_motion: true,
+                auto_collapse_completed: false,
                 ..TranscriptRenderOptions::default()
             },
         );
@@ -5279,6 +5548,7 @@ mod tests {
             80,
             TranscriptRenderOptions {
                 low_motion: true,
+                auto_collapse_completed: false,
                 ..TranscriptRenderOptions::default()
             },
         );
@@ -5505,7 +5775,13 @@ mod tests {
             is_diff: false,
         }));
 
-        let live = cell.lines_with_options(80, TranscriptRenderOptions::default());
+        let live = cell.lines_with_options(
+            80,
+            TranscriptRenderOptions {
+                auto_collapse_completed: false,
+                ..TranscriptRenderOptions::default()
+            },
+        );
         let transcript = cell.transcript_lines(80);
 
         assert!(
@@ -5540,8 +5816,13 @@ mod tests {
             is_diff: false,
         }));
 
-        let live_text =
-            lines_text(&cell.lines_with_options(80, TranscriptRenderOptions::default()));
+        let live_text = lines_text(&cell.lines_with_options(
+            80,
+            TranscriptRenderOptions {
+                auto_collapse_completed: false,
+                ..TranscriptRenderOptions::default()
+            },
+        ));
 
         // Phase 3: card-rail glyphs (╭/│/╰) were removed — the tool header
         // glyph plus indented body is the only frame now. Just verify the
@@ -5576,8 +5857,13 @@ mod tests {
             is_diff: false,
         }));
 
-        let live_text =
-            lines_text(&cell.lines_with_options(80, TranscriptRenderOptions::default()));
+        let live_text = lines_text(&cell.lines_with_options(
+            80,
+            TranscriptRenderOptions {
+                auto_collapse_completed: false,
+                ..TranscriptRenderOptions::default()
+            },
+        ));
 
         // Live mode: one-line summary + expand affordance.
         assert!(
@@ -5811,5 +6097,249 @@ mod tests {
         assert!(summary.contains("read_file"));
         assert!(summary.contains("list_dir"));
         assert!(summary.contains("all ok"));
+    }
+
+    // === Auto-collapse tests ===
+
+    /// Helper: build a completed thinking cell with multi-line content.
+    fn completed_thinking_cell() -> HistoryCell {
+        HistoryCell::Thinking {
+            content: "Line one of reasoning.\nLine two with detail.\nLine three conclusion."
+                .to_string(),
+            streaming: false,
+            duration_secs: Some(1.5),
+        }
+    }
+
+    /// When `auto_collapse_completed` is on and the cell is NOT user-expanded,
+    /// a completed thinking cell renders a 1-line header + "Space to expand"
+    /// affordance — not the full multi-line body.
+    #[test]
+    fn auto_collapse_folds_completed_thinking() {
+        let cell = completed_thinking_cell();
+
+        let collapsed = cell.lines_with_options(
+            80,
+            TranscriptRenderOptions {
+                auto_collapse_completed: true,
+                ..TranscriptRenderOptions::default()
+            },
+        );
+
+        let text = lines_text(&collapsed);
+        assert!(
+            text.contains("Space to expand"),
+            "auto-collapsed thinking must show expand affordance: {text}"
+        );
+        assert!(
+            text.contains("thinking"),
+            "collapsed header must contain 'thinking' label: {text}"
+        );
+        assert!(
+            !text.contains("Line two with detail"),
+            "auto-collapsed thinking must hide body content: {text}"
+        );
+    }
+
+    /// When `auto_collapse_completed` is on but `user_expanded` is set,
+    /// the thinking cell renders full content (not collapsed).
+    #[test]
+    fn auto_collapse_user_expanded_shows_full_thinking() {
+        let cell = completed_thinking_cell();
+
+        let expanded = cell.lines_with_options_folded(
+            80,
+            TranscriptRenderOptions {
+                auto_collapse_completed: true,
+                ..TranscriptRenderOptions::default()
+            },
+            FoldOverrides {
+                user_expanded: true,
+                ..FoldOverrides::default()
+            },
+        );
+
+        let text = lines_text(&expanded);
+        assert!(
+            text.contains("Line two with detail"),
+            "user-expanded thinking must show full body: {text}"
+        );
+        assert!(
+            !text.contains("Space to expand"),
+            "user-expanded thinking must not show collapse affordance: {text}"
+        );
+    }
+
+    /// When `auto_collapse_completed` is OFF, the thinking cell always
+    /// renders the full body (legacy behavior).
+    #[test]
+    fn auto_collapse_disabled_shows_full_thinking() {
+        let cell = completed_thinking_cell();
+
+        let lines = cell.lines_with_options(
+            80,
+            TranscriptRenderOptions {
+                auto_collapse_completed: false,
+                ..TranscriptRenderOptions::default()
+            },
+        );
+
+        let text = lines_text(&lines);
+        assert!(
+            text.contains("Line one of reasoning"),
+            "non-collapsed thinking must show body: {text}"
+        );
+    }
+
+    /// A streaming thinking cell is NOT auto-collapsed (only completed ones are).
+    #[test]
+    fn auto_collapse_skips_streaming_thinking() {
+        let cell = HistoryCell::Thinking {
+            content: "Streaming reasoning...".to_string(),
+            streaming: true,
+            duration_secs: None,
+        };
+
+        let lines = cell.lines_with_options(
+            80,
+            TranscriptRenderOptions {
+                auto_collapse_completed: true,
+                ..TranscriptRenderOptions::default()
+            },
+        );
+
+        let text = lines_text(&lines);
+        assert!(
+            !text.contains("Space to expand"),
+            "streaming thinking must not be auto-collapsed: {text}"
+        );
+    }
+
+    /// When `auto_collapse_completed` is on and the tool is completed (not running),
+    /// a tool cell renders a 1-line header + "Space to expand".
+    #[test]
+    fn auto_collapse_folds_completed_tool() {
+        let cell = success_generic_tool("read_file");
+
+        let collapsed = cell.lines_with_options(
+            80,
+            TranscriptRenderOptions {
+                auto_collapse_completed: true,
+                ..TranscriptRenderOptions::default()
+            },
+        );
+
+        let text = lines_text(&collapsed);
+        assert!(
+            text.contains("Space to expand"),
+            "auto-collapsed tool must show expand affordance: {text}"
+        );
+        assert!(
+            !text.contains("output for read_file"),
+            "auto-collapsed tool must hide body output: {text}"
+        );
+    }
+
+    /// A running tool is NOT auto-collapsed — it keeps full rendering so the
+    /// user sees live progress.
+    #[test]
+    fn auto_collapse_skips_running_tool() {
+        let cell = running_generic_tool("web_search");
+
+        let lines = cell.lines_with_options(
+            80,
+            TranscriptRenderOptions {
+                auto_collapse_completed: true,
+                ..TranscriptRenderOptions::default()
+            },
+        );
+
+        let text = lines_text(&lines);
+        assert!(
+            !text.contains("Space to expand"),
+            "running tool must not be auto-collapsed: {text}"
+        );
+    }
+
+    /// `user_expanded` on a tool cell overrides auto-collapse, showing full
+    /// output just like a non-collapsed cell.
+    #[test]
+    fn auto_collapse_user_expanded_shows_full_tool() {
+        let cell = success_generic_tool("read_file");
+
+        let expanded = cell.lines_with_options_folded(
+            80,
+            TranscriptRenderOptions {
+                auto_collapse_completed: true,
+                ..TranscriptRenderOptions::default()
+            },
+            FoldOverrides {
+                user_expanded: true,
+                ..FoldOverrides::default()
+            },
+        );
+
+        let text = lines_text(&expanded);
+        assert!(
+            !text.contains("Space to expand"),
+            "user-expanded tool must not show collapse affordance: {text}"
+        );
+        assert!(
+            text.contains("output for read_file"),
+            "user-expanded tool must show body output: {text}"
+        );
+    }
+
+    /// Collapsed thinking includes the duration in the header line.
+    #[test]
+    fn auto_collapse_thinking_shows_duration() {
+        let cell = completed_thinking_cell();
+
+        let collapsed = cell.lines_with_options(
+            80,
+            TranscriptRenderOptions {
+                auto_collapse_completed: true,
+                ..TranscriptRenderOptions::default()
+            },
+        );
+
+        let text = lines_text(&collapsed);
+        assert!(
+            text.contains("1.5s"),
+            "collapsed thinking header must show duration: {text}"
+        );
+    }
+
+    /// Toggling: collapse → expand → collapse round-trip. Simulates Space press
+    /// by switching `user_expanded` from false to true and back.
+    #[test]
+    fn auto_collapse_toggle_round_trip() {
+        let cell = completed_thinking_cell();
+        let opts = TranscriptRenderOptions {
+            auto_collapse_completed: true,
+            ..TranscriptRenderOptions::default()
+        };
+
+        // Initial: collapsed.
+        let collapsed = lines_text(&cell.lines_with_options(80, opts));
+        assert!(collapsed.contains("Space to expand"));
+        assert!(!collapsed.contains("Line two"));
+
+        // User presses Space → user_expanded = true.
+        let expanded = lines_text(&cell.lines_with_options_folded(
+            80,
+            opts,
+            FoldOverrides {
+                user_expanded: true,
+                ..FoldOverrides::default()
+            },
+        ));
+        assert!(expanded.contains("Line two"));
+        assert!(!expanded.contains("Space to expand"));
+
+        // User presses Space again → user_expanded = false → re-collapsed.
+        let recollapsed = lines_text(&cell.lines_with_options(80, opts));
+        assert!(recollapsed.contains("Space to expand"));
+        assert!(!recollapsed.contains("Line two"));
     }
 }

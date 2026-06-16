@@ -30,6 +30,46 @@ stack.
 
 ![Active turn — tool-heavy](docs/running_snapshot.png)
 
+A third active-turn snapshot — running with the new **White Light** theme:
+pure white background, DeepSeek-blue accents on completed tool `[✓]` marks,
+assistant label dots, and cache-hit chips; completed thinking blocks and
+tool cards auto-collapse to a single-line header with a "Space to expand"
+affordance.
+
+![Active turn — White Light theme](docs/running_snapshot3.png)
+
+---
+
+## What's new
+
+### White Light theme
+
+A new `white-light` theme joins the built-in palette — pure white surface,
+light-gray depth layers, and DeepSeek-blue (`#487ED2`) accents replacing
+the green/teal tones used in other light themes. Select it with:
+
+```
+/theme white-light
+```
+
+Key color decisions in White Light:
+
+| Element | Color | Hex |
+|---|---|---|
+| Completed `[✓]` / success status | DeepSeek blue | `#487ED2` |
+| Assistant label dot (`●`) | DeepSeek blue | `#487ED2` |
+| Cache-hit chip | DeepSeek blue | `#487ED2` |
+| Elevated cell background | Light green tint | `#E8F5E9` |
+| Diff added lines | DeepSeek blue | `#487ED2` |
+
+### Auto-collapse completed cells
+
+Completed thinking blocks and tool cards now auto-collapse to a 1-line
+header + "Space to expand" affordance, keeping the transcript focused on
+recent activity. Press <kbd>Space</kbd> (with an empty composer) on any
+collapsed cell to expand it back to full content. Toggle with
+`/config auto_collapse_completed on|off`.
+
 ---
 
 ## What this fork is

@@ -55,6 +55,7 @@ pub struct SettingsSection {
     pub paste_burst_detection: bool,
     pub show_thinking: bool,
     pub show_tool_details: bool,
+    pub auto_collapse_completed: bool,
     pub locale: UiLocale,
     pub theme: UiThemeValue,
     #[schemars(
@@ -190,6 +191,7 @@ pub enum UiThemeValue {
     GruvboxDark,
     Claude,
     ClaudeLight,
+    WhiteLight,
     Matrix,
     SolarizedLight,
 }
@@ -336,6 +338,7 @@ pub fn build_document(app: &App, config: &Config) -> Result<ConfigUiDocument> {
             paste_burst_detection: settings.paste_burst_detection,
             show_thinking: settings.show_thinking,
             show_tool_details: settings.show_tool_details,
+            auto_collapse_completed: settings.auto_collapse_completed,
             locale: UiLocale::from_setting(&settings.locale)?,
             theme: UiThemeValue::from_setting(&settings.theme)?,
             background_color: settings.background_color.clone(),
@@ -502,6 +505,10 @@ pub fn apply_document(
         (
             "show_tool_details",
             bool_str(doc.settings.show_tool_details),
+        ),
+        (
+            "auto_collapse_completed",
+            bool_str(doc.settings.auto_collapse_completed),
         ),
         ("locale", doc.settings.locale.as_setting()),
         ("theme", doc.settings.theme.as_setting()),
@@ -753,6 +760,7 @@ impl UiThemeValue {
             Self::GruvboxDark => "gruvbox-dark",
             Self::Claude => "claude",
             Self::ClaudeLight => "claude-light",
+            Self::WhiteLight => "white-light",
             Self::Matrix => "matrix",
             Self::SolarizedLight => "solarized-light",
         }
@@ -771,6 +779,7 @@ impl UiThemeValue {
             Some("gruvbox-dark") => Ok(Self::GruvboxDark),
             Some("claude") => Ok(Self::Claude),
             Some("claude-light") => Ok(Self::ClaudeLight),
+            Some("white-light") | Some("white") => Ok(Self::WhiteLight),
             Some("matrix") => Ok(Self::Matrix),
             Some("solarized-light") => Ok(Self::SolarizedLight),
             Some(other) => bail!("unsupported theme '{other}'"),
@@ -1236,6 +1245,7 @@ background_color = "#1A1B26"
                 "gruvbox-dark",
                 "claude",
                 "claude-light",
+                "white-light",
                 "matrix",
                 "solarized-light"
             ])

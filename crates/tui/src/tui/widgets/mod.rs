@@ -193,6 +193,7 @@ impl ChatWidget {
                 content_area.width.max(1),
                 render_options,
                 &app.folded_thinking,
+                &app.user_expanded_cells,
                 None,
             );
         } else {
@@ -254,6 +255,7 @@ impl ChatWidget {
                 content_area.width.max(1),
                 render_options,
                 &app.folded_thinking,
+                &app.user_expanded_cells,
                 Some(&app.collapsed_cell_map),
             );
         }
@@ -1099,6 +1101,8 @@ impl Renderable for ComposerWidget<'_> {
         // Decorative `> ` prompt prefix mirroring Claude Code's composer.
         // Painted after the paragraph so it never gets clipped by background
         // fill, and only on rows that actually carry input/placeholder text.
+        // Only the first row gets the `❯` glyph; continuation rows use a
+        // two-space indent so the wrapped text aligns cleanly.
         if has_panel {
             let prefix_x = inner_area.x.saturating_sub(COMPOSER_PROMPT_PREFIX_WIDTH);
             let first_row = inner_area.y.saturating_add(top_padding as u16);
@@ -1112,11 +1116,14 @@ impl Renderable for ComposerWidget<'_> {
                 if cell_y >= inner_area.y.saturating_add(inner_area.height) {
                     break;
                 }
-                buf[(prefix_x, cell_y)]
-                    .set_symbol("\u{276F}")
-                    .set_style(prefix_style);
+                let (left, right) = if offset == 0 {
+                    ("\u{276F}", " ")
+                } else {
+                    (" ", " ")
+                };
+                buf[(prefix_x, cell_y)].set_symbol(left).set_style(prefix_style);
                 buf[(prefix_x.saturating_add(1), cell_y)]
-                    .set_symbol(" ")
+                    .set_symbol(right)
                     .set_style(prefix_style);
             }
         }
@@ -1205,9 +1212,11 @@ const APPROVAL_CARD_MIN_HEIGHT: u16 = 18;
 /// Minimum card width — anything tighter makes approval copy wrap too
 /// aggressively on small terminals.
 const APPROVAL_CARD_MIN_WIDTH: u16 = 40;
-/// Maximum card height — taller cards stop reading like a focused
-/// takeover and waste vertical space on large terminals.
-const APPROVAL_CARD_MAX_HEIGHT: u16 = 28;
+/// Maximum card height — raised to 36 so that commands with several
+/// lines of parameters still leave the option list visible at the bottom.
+/// On small terminals the card shrinks to `avail_height` before hitting
+/// this ceiling.
+const APPROVAL_CARD_MAX_HEIGHT: u16 = 36;
 /// Maximum card width — readability craters past this on wide terminals.
 const APPROVAL_CARD_MAX_WIDTH: u16 = 96;
 
@@ -1577,7 +1586,18 @@ fn label_params(locale: Locale) -> &'static str {
     tr(locale, MessageId::ApprovalFieldParams)
 }
 
+/// Maximum characters of a detail value to show before truncating.
+/// Long values (e.g. deep file paths, URL-encoded parameters) can wrap into
+/// several lines and push the option list out of the card; capping here
+/// keeps the approval footer visible.
+const DETAIL_VALUE_MAX_CHARS: usize = 72;
+
 fn push_detail_line(lines: &mut Vec<Line<'static>>, label: &str, value: &str) {
+    let truncated = if value.chars().count() > DETAIL_VALUE_MAX_CHARS {
+        format!("{}…", &value.chars().take(DETAIL_VALUE_MAX_CHARS).collect::<String>())
+    } else {
+        value.to_string()
+    };
     lines.push(Line::from(vec![
         Span::raw("  "),
         Span::styled(
@@ -1586,9 +1606,14 @@ fn push_detail_line(lines: &mut Vec<Line<'static>>, label: &str, value: &str) {
                 .fg(palette::DEEPSEEK_SKY)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::styled(value.to_string(), Style::default().fg(palette::TEXT_BODY)),
+        Span::styled(truncated, Style::default().fg(palette::TEXT_BODY)),
     ]));
 }
+
+/// Maximum command lines to show in a shell-detail block before
+/// collapsing the remainder. Keeps the approval card from overflowing
+/// when multi-line commands are up for review.
+const SHELL_COMMAND_MAX_LINES: usize = 3;
 
 fn push_shell_command_lines(lines: &mut Vec<Line<'static>>, label: &str, command_lines: &[String]) {
     lines.push(Line::from(vec![
@@ -1601,7 +1626,9 @@ fn push_shell_command_lines(lines: &mut Vec<Line<'static>>, label: &str, command
         ),
     ]));
 
-    for line in command_lines {
+    let total = command_lines.len();
+    let visible = total.min(SHELL_COMMAND_MAX_LINES);
+    for line in command_lines.iter().take(visible) {
         lines.push(Line::from(vec![
             Span::raw("    "),
             Span::styled(
@@ -1609,6 +1636,15 @@ fn push_shell_command_lines(lines: &mut Vec<Line<'static>>, label: &str, command
                 Style::default()
                     .fg(palette::TEXT_BODY)
                     .add_modifier(Modifier::BOLD),
+            ),
+        ]));
+    }
+    if total > SHELL_COMMAND_MAX_LINES {
+        lines.push(Line::from(vec![
+            Span::raw("    "),
+            Span::styled(
+                format!("… +{} more lines", total - visible),
+                Style::default().fg(palette::TEXT_HINT).italic(),
             ),
         ]));
     }
@@ -2723,14 +2759,16 @@ fn wrap_text(text: &str, width: usize) -> Vec<String> {
         current.push_str(grapheme);
         current_width += grapheme_width;
 
-        if current_width >= width {
+        if current_width > width {
             lines.push(current);
             current = String::new();
             current_width = 0;
         }
     }
 
-    lines.push(current);
+    if !current.is_empty() {
+        lines.push(current);
+    }
     lines
 }
 
@@ -2932,6 +2970,7 @@ mod tests {
     #[test]
     fn chat_widget_expands_dense_tool_runs_on_demand() {
         let mut app = create_test_app();
+        app.auto_collapse_completed = false;
         app.tool_collapse_mode = ToolCollapseMode::Compact;
         app.tool_collapse_threshold = 3;
         add_dense_tool_run(&mut app);

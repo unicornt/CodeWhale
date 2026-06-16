@@ -239,6 +239,9 @@ pub struct Settings {
     pub show_thinking: bool,
     /// Show detailed tool output
     pub show_tool_details: bool,
+    /// Auto-collapse completed thinking blocks and tool cards to a 1-line
+    /// header while they stream, then collapse on completion. Space expands.
+    pub auto_collapse_completed: bool,
     /// UI locale: auto, en, ja, zh-Hans, pt-BR, es-419
     pub locale: String,
     /// Named UI theme. Accepts `"system"` (follow terminal background),
@@ -342,6 +345,7 @@ impl Default for Settings {
             mention_menu_behavior: "fuzzy".to_string(),
             show_thinking: true,
             show_tool_details: true,
+            auto_collapse_completed: true,
             locale: "auto".to_string(),
             theme: "system".to_string(),
             background_color: None,
@@ -605,6 +609,9 @@ impl Settings {
             "show_tool_details" | "tool_details" => {
                 self.show_tool_details = parse_bool(value)?;
             }
+            "auto_collapse_completed" | "auto_collapse" => {
+                self.auto_collapse_completed = parse_bool(value)?;
+            }
             "locale" | "language" => {
                 let Some(locale) = normalize_configured_locale(value) else {
                     anyhow::bail!(
@@ -616,7 +623,7 @@ impl Settings {
             "theme" => {
                 let Some(id) = crate::palette::ThemeId::from_name(value) else {
                     anyhow::bail!(
-                        "Failed to update setting: invalid theme '{value}'. Expected: system, dark, light, grayscale, catppuccin-mocha, tokyo-night, dracula, gruvbox-dark, solarized-light."
+                        "Failed to update setting: invalid theme '{value}'. Expected: system, terminal, dark, light, grayscale, catppuccin-mocha, tokyo-night, dracula, gruvbox-dark, claude, claude-light, white-light, matrix, solarized-light."
                     );
                 };
                 self.theme = id.name().to_string();
@@ -624,7 +631,7 @@ impl Settings {
             "ui_theme" => {
                 let Some(id) = crate::palette::ThemeId::from_name(value) else {
                     anyhow::bail!(
-                        "Failed to update setting: invalid theme '{value}'. Expected: system, dark, light, grayscale, catppuccin-mocha, tokyo-night, dracula, gruvbox-dark, solarized-light."
+                        "Failed to update setting: invalid theme '{value}'. Expected: system, terminal, dark, light, grayscale, catppuccin-mocha, tokyo-night, dracula, gruvbox-dark, claude, claude-light, white-light, matrix, solarized-light."
                     );
                 };
                 self.theme = id.name().to_string();
@@ -803,6 +810,10 @@ impl Settings {
         ));
         lines.push(format!("  show_thinking:      {}", self.show_thinking));
         lines.push(format!("  show_tool_details:  {}", self.show_tool_details));
+        lines.push(format!(
+            "  auto_collapse_completed: {}",
+            self.auto_collapse_completed
+        ));
         lines.push(format!("  locale:            {}", self.locale));
         lines.push(format!("  theme:              {}", self.theme));
         lines.push(format!(
@@ -897,6 +908,10 @@ impl Settings {
             ),
             ("show_thinking", "Show model thinking: on/off"),
             ("show_tool_details", "Show detailed tool output: on/off"),
+            (
+                "auto_collapse_completed",
+                "Auto-collapse completed thinking/tool cells to 1-line header: on/off",
+            ),
             (
                 "base_url",
                 "HTTP base URL for DeepSeek-compatible endpoints.",

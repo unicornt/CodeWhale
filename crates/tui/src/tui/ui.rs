@@ -3193,7 +3193,20 @@ async fn run_event_loop(
                 app.insert_str(&pending);
             }
 
-            if (is_plain_char || is_enter) && super::paste::handle_paste_burst_key(app, &key, now) {
+            // Skip paste-burst detection for bare Space when the composer is
+            // empty — that keystroke is the "Space to expand" affordance for
+            // auto-collapsed thinking/tool cells, not a typed character.
+            // Without this guard the paste-burst machinery holds the space
+            // in its pending-first-char slot and swallows it before the
+            // expand handler (further below) ever sees it.
+            let is_space_expand = key.code == KeyCode::Char(' ')
+                && key.modifiers == KeyModifiers::NONE
+                && app.input.is_empty();
+
+            if (is_plain_char || is_enter)
+                && !is_space_expand
+                && super::paste::handle_paste_burst_key(app, &key, now)
+            {
                 continue;
             }
 
@@ -3251,31 +3264,52 @@ async fn run_event_loop(
                 {
                     continue;
                 }
-                // Space toggles fold/unfold of the focused thinking block
-                // when the composer is empty. For thinking cells, toggles
-                // between summary and full content; for other cells, toggles
-                // visibility (#1972, #2348).
+                // Space toggles fold/unfold of the focused cell when the composer
+                // is empty. Auto-collapsed thinking/tool cells toggle
+                // user_expanded_cells; other cells toggle collapsed_cells (#1972,
+                // #2348). Uses original virtual indices (mapped from filtered
+                // cursor position via collapsed_cell_map).
+                //
+                // Uses a type-agnostic cursor resolver instead of
+                // `detail_target_cell_index` so Thinking cells are reachable
+                // (cell_has_detail_target only covers Tool / SubAgent).
                 KeyCode::Char(' ')
                     if key.modifiers == KeyModifiers::NONE && app.input.is_empty() =>
                 {
-                    if let Some(idx) = detail_target_cell_index(app) {
-                        let is_thinking = app
-                            .history
-                            .get(idx)
-                            .is_some_and(|c| matches!(c, HistoryCell::Thinking { .. }));
-                        if is_thinking {
-                            if app.folded_thinking.contains(&idx) {
-                                app.folded_thinking.remove(&idx);
-                                app.status_message = Some("Thinking block expanded".to_string());
+                    if let Some(filtered_idx) = visible_cell_index(app) {
+                        // Map filtered index → original virtual index.
+                        let original_idx = app
+                            .collapsed_cell_map
+                            .get(filtered_idx)
+                            .copied()
+                            .unwrap_or(filtered_idx);
+                        let is_auto_collapsible = app.auto_collapse_completed
+                            && app
+                                .cell_at_virtual_index(original_idx)
+                                .is_some_and(|cell| match cell {
+                                    HistoryCell::Thinking {
+                                        streaming: false, ..
+                                    } => true,
+                                    HistoryCell::Tool(cell) => {
+                                        cell.status() != Some(ToolStatus::Running)
+                                    }
+                                    _ => false,
+                                });
+                        if is_auto_collapsible {
+                            if app.user_expanded_cells.contains(&original_idx) {
+                                app.user_expanded_cells.remove(&original_idx);
+                                app.status_message =
+                                    Some("Cell collapsed".to_string());
                             } else {
-                                app.folded_thinking.insert(idx);
-                                app.status_message = Some("Thinking block folded".to_string());
+                                app.user_expanded_cells.insert(original_idx);
+                                app.status_message =
+                                    Some("Auto-collapsed cell expanded".to_string());
                             }
-                        } else if app.collapsed_cells.contains(&idx) {
-                            app.collapsed_cells.remove(&idx);
+                        } else if app.collapsed_cells.contains(&original_idx) {
+                            app.collapsed_cells.remove(&original_idx);
                             app.status_message = Some("Cell expanded".to_string());
                         } else {
-                            app.collapsed_cells.insert(idx);
+                            app.collapsed_cells.insert(original_idx);
                             app.status_message = Some("Cell collapsed".to_string());
                         }
                         app.mark_history_updated();
@@ -9077,6 +9111,33 @@ pub(crate) fn copy_cell_to_clipboard(app: &mut App, cell_index: usize) -> bool {
         app.status_message = Some("Copy failed".to_string());
         false
     }
+}
+
+/// Return the cell index at the current viewport cursor position without
+/// filtering by cell type. Unlike `detail_target_cell_index`, this includes
+/// Thinking cells so Space can toggle their expand/collapse state.
+fn visible_cell_index(app: &App) -> Option<usize> {
+    if let Some((start, _)) = app.viewport.transcript_selection.ordered_endpoints() {
+        return app
+            .viewport
+            .transcript_cache
+            .line_meta()
+            .get(start.line_index)
+            .and_then(|meta| meta.cell_line())
+            .map(|(cell_index, _)| cell_index);
+    }
+
+    let line_meta = app.viewport.transcript_cache.line_meta();
+    let top = app.viewport.last_transcript_top;
+    let visible = app.viewport.last_transcript_visible.max(1);
+    let start = top.min(line_meta.len().saturating_sub(1));
+    let end = start.saturating_add(visible).min(line_meta.len());
+    for meta in line_meta.iter().take(end).skip(start) {
+        if let Some((cell_index, _)) = meta.cell_line() {
+            return Some(cell_index);
+        }
+    }
+    app.history.len().checked_sub(1)
 }
 
 fn detail_target_cell_index(app: &App) -> Option<usize> {

@@ -25,7 +25,7 @@ use ratatui::{
 };
 
 use crate::tui::app::TranscriptSpacing;
-use crate::tui::history::{HistoryCell, TranscriptRenderOptions};
+use crate::tui::history::{FoldOverrides, HistoryCell, TranscriptRenderOptions};
 use crate::tui::scrolling::TranscriptLineMeta;
 use crate::tui::ui_text::CopyLineSeparator;
 
@@ -78,6 +78,10 @@ pub struct TranscriptViewCache {
     /// When this changes, all cells must be re-rendered because the fold
     /// state affects the rendered output but not the cell revision.
     folded_cells: HashSet<usize>,
+    /// Snapshot of user_expanded_cells from the last `ensure` call.
+    /// When this changes, all cells must be re-rendered; same reasoning
+    /// as `folded_cells` — render output changes but cell revision doesn't.
+    user_expanded_cells: HashSet<usize>,
     /// Per-cell rendered output, indexed by current cell position.
     /// Length always equals the cell count seen on the last `ensure` call.
     per_cell: Vec<CachedCell>,
@@ -100,6 +104,7 @@ impl TranscriptViewCache {
             width: 0,
             options: TranscriptRenderOptions::default(),
             folded_cells: HashSet::new(),
+            user_expanded_cells: HashSet::new(),
             per_cell: Vec::new(),
             lines: Vec::new(),
             line_meta: Vec::new(),
@@ -134,6 +139,7 @@ impl TranscriptViewCache {
             width,
             options,
             &HashSet::new(),
+            &HashSet::new(),
             None,
         );
     }
@@ -156,23 +162,27 @@ impl TranscriptViewCache {
         width: u16,
         options: TranscriptRenderOptions,
         folded_cells: &HashSet<usize>,
+        user_expanded_cells: &HashSet<usize>,
         original_index_map: Option<&[usize]>,
     ) {
         let total_cells: usize = cell_shards.iter().map(|s| s.len()).sum();
 
         let layout_changed = self.width != width || self.options != options;
         let folded_changed = self.folded_cells != *folded_cells;
-        if layout_changed || folded_changed {
+        let user_expanded_changed = self.user_expanded_cells != *user_expanded_cells;
+        if layout_changed || folded_changed || user_expanded_changed {
             self.per_cell.clear();
         }
         self.width = width;
         self.options = options;
         self.folded_cells = folded_cells.clone();
+        self.user_expanded_cells = user_expanded_cells.clone();
 
         // Track whether anything actually changed; if all cells are reused at
         // the same indices, we can skip the reflatten.
         let old_len = self.per_cell.len();
-        let mut any_dirty = layout_changed || folded_changed || old_len != total_cells;
+        let mut any_dirty =
+            layout_changed || folded_changed || user_expanded_changed || old_len != total_cells;
         let mut first_dirty: Option<usize> = if old_len != total_cells {
             Some(old_len.min(total_cells))
         } else {
@@ -217,8 +227,14 @@ impl TranscriptViewCache {
                 let original_idx = original_index_map
                     .map(|m| *m.get(idx).unwrap_or(&idx))
                     .unwrap_or(idx);
-                let folded = folded_cells.contains(&original_idx);
-                let rendered = cell.lines_with_copy_metadata_folded(render_width, options, folded);
+                let thinking_folded = folded_cells.contains(&original_idx);
+                let user_expanded = user_expanded_cells.contains(&original_idx);
+                let overrides = FoldOverrides {
+                    thinking_folded,
+                    user_expanded,
+                };
+                let rendered =
+                    cell.lines_with_copy_metadata_folded(render_width, options, overrides);
                 let mut lines = Vec::with_capacity(rendered.len());
                 let mut copy_separators = Vec::with_capacity(rendered.len());
                 let mut copy_prefix_widths = Vec::with_capacity(rendered.len());
@@ -1074,20 +1090,21 @@ mod tests {
         let revisions = [1u64];
         let options = TranscriptRenderOptions {
             verbose: true, // expanded by default
+            auto_collapse_completed: false,
             ..TranscriptRenderOptions::default()
         };
         let width = 80u16;
 
         // First render: no folding → full content.
         let mut cache = TranscriptViewCache::new();
-        cache.ensure_split(&[&cells], &revisions, width, options, &HashSet::new(), None);
+        cache.ensure_split(&[&cells], &revisions, width, options, &HashSet::new(), &HashSet::new(), None);
         let full_line_count = cache.total_lines();
 
         // Second render: fold the thinking cell → should invalidate and
         // produce fewer lines (collapsed summary).
         let mut folded = HashSet::new();
         folded.insert(0usize);
-        cache.ensure_split(&[&cells], &revisions, width, options, &folded, None);
+        cache.ensure_split(&[&cells], &revisions, width, options, &folded, &HashSet::new(), None);
         let folded_line_count = cache.total_lines();
 
         assert!(
@@ -1096,7 +1113,7 @@ mod tests {
         );
 
         // Third render: unfold → should restore full content.
-        cache.ensure_split(&[&cells], &revisions, width, options, &HashSet::new(), None);
+        cache.ensure_split(&[&cells], &revisions, width, options, &HashSet::new(), &HashSet::new(), None);
         let restored_line_count = cache.total_lines();
         assert_eq!(
             restored_line_count, full_line_count,
@@ -1124,13 +1141,14 @@ mod tests {
         let revisions = [1u64, 2u64];
         let options = TranscriptRenderOptions {
             verbose: true,
+            auto_collapse_completed: false,
             ..TranscriptRenderOptions::default()
         };
         let width = 80u16;
 
         // No collapsing, no folding — baseline.
         let mut cache = TranscriptViewCache::new();
-        cache.ensure_split(&[&cells], &revisions, width, options, &HashSet::new(), None);
+        cache.ensure_split(&[&cells], &revisions, width, options, &HashSet::new(), &HashSet::new(), None);
         let baseline = cache.total_lines();
         assert!(baseline > 0, "baseline render should contain visible lines");
 
@@ -1150,6 +1168,7 @@ mod tests {
             width,
             options,
             &folded,
+            &HashSet::new(),
             Some(&index_map),
         );
         let folded_filtered = cache2.total_lines();
@@ -1164,6 +1183,7 @@ mod tests {
             &filtered_revs,
             width,
             options,
+            &HashSet::new(),
             &HashSet::new(),
             Some(&index_map),
         );
